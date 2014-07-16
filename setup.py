@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(
-     name="pytest-xdist",
+     name="pytest-interactive",
      version='0.1.dev1',
      description='py.test interactive plugin for test selection just after the collection phase',
      # long_description=open('README.txt').read(),

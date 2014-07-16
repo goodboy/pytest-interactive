@@ -41,5 +41,4 @@ def mode_b(dut):
 
 @pytest.mark.usefixtures("mode_a", "mode_b")
 def test_mode():
-    ipdb.set_trace()
     assert True
