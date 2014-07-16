@@ -1,0 +1,30 @@
+from setuptools import setup
+
+setup(
+     name="pytest-xdist",
+     version='0.1.dev1',
+     description='py.test interactive plugin for test selection just after the collection phase',
+     # long_description=open('README.txt').read(),
+     license='MIT',
+     author='tyler goodlet',
+     author_email='tgoodlet@gmail.com',
+     url='http://',
+     platforms=['linux'],
+     packages = ['interactive'],
+     entry_points = {'pytest11': ['interactive = interactive.plugin'],},
+     zip_safe=False,
+     install_requires = ['pytest>=2.4.2'],
+     classifiers=[
+     'Development Status :: 3 - Alpha',
+     'Intended Audience :: Developers',
+     'License :: OSI Approved :: MIT License',
+     'Operating System :: POSIX',
+     'Operating System :: Microsoft :: Windows',
+     'Operating System :: MacOS :: MacOS X',
+     'Topic :: Software Development :: Testing',
+     'Topic :: Software Development :: Quality Assurance',
+     'Topic :: Utilities',
+     'Programming Language :: Python',
+     'Programming Language :: Python :: 3',
+     ],
+ )
