@@ -25,20 +25,29 @@ class Dut(object):
 def dut(request):
     return Dut('c')
 
-@pytest.yield_fixture
-def mode_a(dut):
+
+@pytest.yield_fixture(params=('a', 'b', 'c'))
+def mode(request, dut):
     orig_mode = dut.get_mode()
-    dut.set_mode('a')
+    dut.set_mode(request.param)
     yield dut
     dut.set_mode(orig_mode)
 
-@pytest.yield_fixture
-def mode_b(dut):
-    orig_mode = dut.get_mode()
-    dut.set_mode('b')
-    yield dut
-    dut.set_mode(orig_mode)
 
-@pytest.mark.usefixtures("mode_a", "mode_b")
-def test_mode():
-    assert True
+@pytest.yield_fixture(params=[1, 2, 3])
+def inputs(request):
+    yield request.param
+
+
+def test_modes(mode):
+    assert mode.check_mode()
+
+
+def test_inputs(inputs):
+    assert inputs < 2
+
+
+class TestBoth(object):
+    def test_m(self, mode, inputs):
+        assert mode.check_mode()
+        assert inputs < 2
