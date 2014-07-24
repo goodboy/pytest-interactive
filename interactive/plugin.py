@@ -8,6 +8,11 @@ def pytest_addoption(parser):
             help="enable iteractive selection of tests after collection")
 
 
+def pytest_keyboard_interrupt(excinfo):
+    'called for keyboard interrupt'
+    pass
+
+
 def pytest_collection_modifyitems(session, config, items):
     """called after collection has been performed, may filter or re-order
     the items in-place."""
@@ -38,7 +43,7 @@ FuncRef = namedtuple('FuncRef', 'func count')
 class ItemTree(object):
     def __init__(self, funcitems):
         self._funcset = funcitems
-        self._nodes = {} #OrderedDict({})
+        self._nodes = OrderedDict({})
         self._mods = {}
         for item in funcitems:
             mod, path = get_modpath(item)
