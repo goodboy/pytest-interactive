@@ -1,6 +1,6 @@
 import _pytest
-from collections import OrderedDict, namedtuple
 import IPython
+from collections import OrderedDict, namedtuple, defaultdict
 
 def pytest_addoption(parser):
     parser.addoption("--i", "--interactive", action="store_true",
@@ -19,47 +19,59 @@ def pytest_collection_modifyitems(session, config, items):
     if not config.option.interactive:
         return
 
-    root = ItemTree(items)
+    root = TestTree(items)
     # build a tree of test items
     IPython.embed()
 
+_root_id = '.'
 
-def get_modpath(node, path=()):
+def get_modpath(nodes, path=()):
     '''return the eldest parent of this node
     a child of the root/session'''
+    node = [0]
     try:
         step = (node._obj.__name__,)
     except AttributeError:
         step = ()  # don't bother with the instance node/step
-    if node.parent.nodeid == '.':  # the root/session
-        return node, step + path
+    if node.parent.nodeid == _root_id:  # the root/session
+        return (node.parent,) + nodes, (_root_id,) + step + path
     if node.parent:
-        return get_modpath(node.parent, path=step + path)
+        return get_modpath((node.parent,) + nodes, path=step + path)
 
 
 FuncRef = namedtuple('FuncRef', 'func count')
 
 
-class ItemTree(object):
+class TestTree(object):
     def __init__(self, funcitems):
-        self._funcset = funcitems
-        self._nodes = OrderedDict({})
-        self._mods = {}
-        for item in funcitems:
-            mod, path = get_modpath(item)
-            self._mods[path[0]] = mod
-            self._set(path, item)
-            for i, key in enumerate(path):
-                self._set((path[i],), item)
+        self._funcitems = funcitems
+        # self._func2node = defaultdict(set())
+        self._path2funcs = defaultdict([])
+        self._node2children = defaultdict([])
+        # self._mods = OrderedDict()
 
-    def _set(self, path, item):
+        # self._set((_root_id,), funcitems)
+        self._root = Node(self, (_root_id,), funcitems)
+        self._path2funcs[(_root_id,)].extend(items)
+        for item in funcitems:
+            nodes, path = get_modpath((item,))
+            self._path2funcs[path].append(item)
+            # self._set(path, (item,))
+            # self._mods[path[0]] = Node(self, path, mod)
+            loc = (_root_id,)
+            for key, node in zip(path, nodes):
+                self._node2children[loc].append(key)
+                loc += key
+                self._path2funcs[path].append(item)
+
+    def _set(self, path, items):
+        # fullpath = (_root_id,) + path
         # try:
         #     funcref = self._funcset[id(item)]
         #     funcref.count += 1
         # except KeyError:
         #     funcref = FuncRef(item, 0)  # use weakrefs here?
         #     self._funcset[id(item)] = funcref
-        self._nodes[path] = Node(self, path, item)
 
     def _get_children(self, path):
         'return the children for a node'
@@ -71,7 +83,7 @@ class ItemTree(object):
             object.__getattribute__(self, key)
         except AttributeError as ae:
             try:
-                return self._nodes[(key,)]
+                return self._mods[key]
             except KeyError:
                 raise ae
 
@@ -85,22 +97,17 @@ class ItemTree(object):
 
 
 class Node(object):
-    def __init__(self, root, path, funcref):
-        self._root = root
+    def __init__(self, tree, path, funcref):
+        self._tree = tree
         self._path = path
         self._fr = funcref
 
     # def __dir__(self):
         # return self._root.get_children
 
-    def __setattr__(self, key, value):
-        pass
-
     def __getattr__(self, key):
-        return self.root.key
-
-    # def __repr__(self):
-    #     pass
+        children = self._tree.get_children(self._path)
+        return type(self)(self._tree, self._path, 
 
     def run(self):
         'run this test item'
