@@ -1,5 +1,7 @@
+import sys
 import _pytest
 import IPython
+import types
 from collections import OrderedDict, namedtuple, defaultdict
 
 def pytest_addoption(parser):
@@ -9,8 +11,8 @@ def pytest_addoption(parser):
 
 
 def pytest_keyboard_interrupt(excinfo):
-    'called for keyboard interrupt'
-    pass
+    'enter the debugger on keyboard interrupt'
+    pytest.set_trace()
 
 
 def pytest_collection_modifyitems(session, config, items):
@@ -19,96 +21,160 @@ def pytest_collection_modifyitems(session, config, items):
     if not config.option.interactive:
         return
 
-    root = TestTree(items)
+    # prep and embed ipython
+    from IPython.terminal.embed import InteractiveShellEmbed
+    ipshell = InteractiveShellEmbed(banner1='Entering IPython workspace...',
+                                  exit_msg='Leaving interpreter starting pytest run')
+
     # build a tree of test items
-    IPython.embed()
+    tt = TestTree(items, ipshell)
+    ipshell("Welcome to pytest-interactive, the ipython-pytest bonanza!")
+
 
 _root_id = '.'
+Package = namedtuple('Package', 'name path')
+Directory = namedtuple('Directory', 'name path')
 
-def get_modpath(nodes, path=()):
-    '''return the eldest parent of this node
-    a child of the root/session'''
-    node = [0]
+
+# XXX consider adding in a cache
+# maybe this could be implemented more elegantly as a generator?
+def get_path(nodes, path=(), _node_cache={}):
+    '''return all parent objs of this node up to the root/session'''
+    node = nodes[0]  # the most recently prefixed node
+    newnodes = ()
     try:
-        step = (node._obj.__name__,)
-    except AttributeError:
-        step = ()  # don't bother with the instance node/step
-    if node.parent.nodeid == _root_id:  # the root/session
-        return (node.parent,) + nodes, (_root_id,) + step + path
+        name = node._obj.__name__
+        print("__name__ is {}".format(name))
+        if '.' in name and isinstance(node, _pytest.python.Module):  # packaged module
+            pkgname = node._obj.__package__
+            prefix = tuple(name.split('.'))
+            lpath = node.fspath
+            for level in reversed(prefix[:-1]):
+                lpath = lpath.join('../')
+                newnodes = (Package(level, lpath),) + newnodes
+        else:
+            prefix = (name,)  # pack
+    except AttributeError as ae:  # when either Instance or non-packaged module
+        if isinstance(node, _pytest.python.Instance):
+            prefix = ('Instance',)  # don't bother with the instance node/step
+        elif isinstance(node, _pytest.python.Module):
+            print("ERROR!!!?")
+        else :  # should never get here
+            print('Error wtf detected!? -> {}'.format(node))
+            prefix = ('wtf?',)
+
+    newnodes = (node.parent,) + newnodes
+    # edge case (the root/session)
+    if node.parent.nodeid == _root_id:
+        return newnodes + nodes, (_root_id,) + prefix + path
+    # normal case
     if node.parent:
-        return get_modpath((node.parent,) + nodes, path=step + path)
+        return get_path(newnodes + nodes, path=prefix + path)
+    else:
+        raise ValueError("node '{}' has no parent?!".format(node))
 
 
-FuncRef = namedtuple('FuncRef', 'func count')
+# borrowed from:
+# http://stackoverflow.com/questions/4126348/how-do-i-rewrite-this-function-to-implement-ordereddict/4127426#4127426
+class OrderedDefaultdict(OrderedDict):
+
+    def __init__(self, *args, **kwargs):
+        if not args:
+            self.default_factory = None
+        else:
+            if not (args[0] is None or callable(args[0])):
+                raise TypeError('first argument must be callable or None')
+            self.default_factory = args[0]
+        args = args[1:]
+        super(OrderedDefaultdict, self).__init__(*args, **kwargs)
+
+    def __missing__(self, key):
+        if self.default_factory is None:
+            raise KeyError(key)
+        self[key] = default = self.default_factory()
+        return default
+
+    def __reduce__(self):  # optional, for pickle support
+        args = (self.default_factory,) if self.default_factory else ()
+        return self.__class__, args, None, None, self.iteritems()
 
 
 class TestTree(object):
-    def __init__(self, funcitems):
-        self._funcitems = funcitems
-        # self._func2node = defaultdict(set())
-        self._path2funcs = defaultdict([])
-        self._node2children = defaultdict([])
-        # self._mods = OrderedDict()
-
-        # self._set((_root_id,), funcitems)
-        self._root = Node(self, (_root_id,), funcitems)
-        self._path2funcs[(_root_id,)].extend(items)
+    def __init__(self, funcitems, ipshell):
+        self._shell = ipshell
+        self._funcitems = funcitems  # never modify this
+        self._path2funcs = OrderedDefaultdict(set)
+        self._path2children = defaultdict(set)
+        self._nodes = {}
         for item in funcitems:
-            nodes, path = get_modpath((item,))
-            self._path2funcs[path].append(item)
-            # self._set(path, (item,))
-            # self._mods[path[0]] = Node(self, path, mod)
-            loc = (_root_id,)
-            for key, node in zip(path, nodes):
-                self._node2children[loc].append(key)
-                loc += key
-                self._path2funcs[path].append(item)
-
-    def _set(self, path, items):
-        # fullpath = (_root_id,) + path
-        # try:
-        #     funcref = self._funcset[id(item)]
-        #     funcref.count += 1
-        # except KeyError:
-        #     funcref = FuncRef(item, 0)  # use weakrefs here?
-        #     self._funcset[id(item)] = funcref
+            print(item)
+            nodes, path = get_path((item,))
+            for i, (key, node) in enumerate(zip(path, nodes), 1):
+                loc = path[:i]
+                child = path[:i+1]
+                # print(loc)
+                self._path2funcs[loc].add(item)
+                if loc != child:
+                    self._path2children[loc].add(child)
+                    # print(child)
+                if loc not in self._nodes:
+                    self._nodes[loc] = node
+        self._root = Node(self, (_root_id,))#, funcitems)
 
     def _get_children(self, path):
         'return the children for a node'
-        self._nodes[path]
-        return
+        return self._path2children[path]
 
     def __getattr__(self, key):
         try:
             object.__getattribute__(self, key)
         except AttributeError as ae:
             try:
-                return self._mods[key]
-            except KeyError:
+                return getattr(self._root, key)
+            except AttributeError:
                 raise ae
 
     def __dir__(self, key=None):
-        return self._mods.keys()
-        # if key:
-        #     node = self._nodes[key]
-        # else:
-        #     node = self._nodes
-        # return [path[0] for path in self._nodes.keys() if len(path) == 1 ]
+        return dir(self._root) + dir(self.__class__)
+
+    def _runall(self, path):
+        funcitems = self._path2funcs[path]
+        self._funcitems[:] = funcitems
+        self._shell.exit()
 
 
 class Node(object):
-    def __init__(self, tree, path, funcref):
+    def __init__(self, tree, path):
         self._tree = tree
         self._path = path
-        self._fr = funcref
+        self._len = len(path)
 
-    # def __dir__(self):
-        # return self._root.get_children
+    def __dir__(self):
+        children = self._tree._get_children(self._path)
+        return sorted([key[self._len] for key in children])
 
-    def __getattr__(self, key):
-        children = self._tree.get_children(self._path)
-        return type(self)(self._tree, self._path, 
+    def __getattr__(self, attr):
+        try:
+            object.__getattribute__(self, attr)
+        except AttributeError as ae:
+            try:
+                return self._new(attr)
+            except TypeError:
+                raise ae
 
-    def run(self):
-        'run this test item'
-        pass
+    def _get_node(self):
+        return self._tree._nodes[self._path]
+
+    node = property(_get_node)
+
+    def _new(self, key):
+        'return a new node'
+        if key is 'parent':
+            path = self._path[:-1]
+        else:
+            path = self._path + (key,)
+        return type(self)(self._tree, path)
+
+    def __call__(self):
+        'Run all tests under this node'
+        return self._tree._runall(self._path)
