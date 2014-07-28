@@ -1,5 +1,6 @@
 import sys
 import _pytest
+import pytest
 import IPython
 import types
 from collections import OrderedDict, namedtuple, defaultdict
@@ -38,13 +39,15 @@ Directory = namedtuple('Directory', 'name path')
 
 # XXX consider adding in a cache
 # maybe this could be implemented more elegantly as a generator?
+# XXX consider leveraging node.listchain()
+# here instead of recursing..
 def get_path(nodes, path=(), _node_cache={}):
     '''return all parent objs of this node up to the root/session'''
     node = nodes[0]  # the most recently prefixed node
     newnodes = ()
     try:
         name = node._obj.__name__
-        print("__name__ is {}".format(name))
+        # print("__name__ is {}".format(name))
         if '.' in name and isinstance(node, _pytest.python.Module):  # packaged module
             pkgname = node._obj.__package__
             prefix = tuple(name.split('.'))
@@ -57,11 +60,8 @@ def get_path(nodes, path=(), _node_cache={}):
     except AttributeError as ae:  # when either Instance or non-packaged module
         if isinstance(node, _pytest.python.Instance):
             prefix = ('Instance',)  # don't bother with the instance node/step
-        elif isinstance(node, _pytest.python.Module):
-            print("ERROR!!!?")
         else :  # should never get here
-            print('Error wtf detected!? -> {}'.format(node))
-            prefix = ('wtf?',)
+            raise ae
 
     newnodes = (node.parent,) + newnodes
     # edge case (the root/session)
@@ -107,7 +107,7 @@ class TestTree(object):
         self._path2children = defaultdict(set)
         self._nodes = {}
         for item in funcitems:
-            print(item)
+            # print(item)
             nodes, path = get_path((item,))
             for i, (key, node) in enumerate(zip(path, nodes), 1):
                 loc = path[:i]
@@ -135,7 +135,8 @@ class TestTree(object):
                 raise ae
 
     def __dir__(self, key=None):
-        return dir(self._root) + dir(self.__class__)
+        attrs = sorted(set(dir(type(self)) + self.__dict__.keys()))
+        return dir(self._root) + attrs
 
     def _runall(self, path):
         funcitems = self._path2funcs[path]
@@ -158,14 +159,19 @@ class Node(object):
             object.__getattribute__(self, attr)
         except AttributeError as ae:
             try:
+                self._get_node(self._path + (attr,))
                 return self._new(attr)
             except TypeError:
                 raise ae
+            except KeyError:
+                raise AttributeError("Node '{}' does not exist".format(attr))
 
-    def _get_node(self):
-        return self._tree._nodes[self._path]
+    def _get_node(self, path=None):
+        if not path:
+            path = self._path
+        return self._tree._nodes[path]
 
-    node = property(_get_node)
+    _node = property(_get_node)
 
     def _new(self, key):
         'return a new node'
