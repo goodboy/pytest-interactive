@@ -29,53 +29,16 @@ def pytest_collection_modifyitems(session, config, items):
 
     # build a tree of test items
     tt = TestTree(items, ipshell)
-    ipshell("Welcome to pytest-interactive, the ipython-pytest bonanza!")
-
-
-_root_id = '.'
-Package = namedtuple('Package', 'name path')
-Directory = namedtuple('Directory', 'name path')
-
-
-# XXX consider adding in a cache
-# maybe this could be implemented more elegantly as a generator?
-# XXX consider leveraging node.listchain()
-# here instead of recursing..
-def get_path(nodes, path=(), _node_cache={}):
-    '''return all parent objs of this node up to the root/session'''
-    node = nodes[0]  # the most recently prefixed node
-    newnodes = ()
-    try:
-        name = node._obj.__name__
-        # print("__name__ is {}".format(name))
-        if '.' in name and isinstance(node, _pytest.python.Module):  # packaged module
-            pkgname = node._obj.__package__
-            prefix = tuple(name.split('.'))
-            lpath = node.fspath
-            for level in reversed(prefix[:-1]):
-                lpath = lpath.join('../')
-                newnodes = (Package(level, lpath),) + newnodes
-        else:
-            prefix = (name,)  # pack
-    except AttributeError as ae:  # when either Instance or non-packaged module
-        if isinstance(node, _pytest.python.Instance):
-            prefix = ('Instance',)  # don't bother with the instance node/step
-        else :  # should never get here
-            raise ae
-
-    newnodes = (node.parent,) + newnodes
-    # edge case (the root/session)
-    if node.parent.nodeid == _root_id:
-        return newnodes + nodes, (_root_id,) + prefix + path
-    # normal case
-    if node.parent:
-        return get_path(newnodes + nodes, path=prefix + path)
-    else:
-        raise ValueError("node '{}' has no parent?!".format(node))
+    ipshell("Welcome to pytest-interactive.\nPlease explore the test "
+            "tree using tt.<tab> to select and run a subset of tests from the "
+            "collection tree.\n"
+            "When finshed navigating to a test node, simply call it to have "
+            "pytest invoke all tests under that node.")
 
 
 # borrowed from:
-# http://stackoverflow.com/questions/4126348/how-do-i-rewrite-this-function-to-implement-ordereddict/4127426#4127426
+# http://stackoverflow.com/questions/4126348/
+# how-do-i-rewrite-this-function-to-implement-ordereddict/4127426#4127426
 class OrderedDefaultdict(OrderedDict):
 
     def __init__(self, *args, **kwargs):
@@ -99,6 +62,68 @@ class OrderedDefaultdict(OrderedDict):
         return self.__class__, args, None, None, self.iteritems()
 
 
+_root_id = '.'
+Package = namedtuple('Package', 'name path node')
+# Directory = namedtuple('Directory', 'name path node')
+# ParametrizedFunc = namedtuple('ParametrizedFunc', 'name count')
+
+class ParametrizedFunc(object):
+    def __init__(self, name, instances):
+        if not isinstance(instances, list):
+            instances = [instances]
+        self._instances = instances
+
+    def __dir__(self):
+        attrs = sorted(set(dir(type(self)) + self.__dict__.keys()))
+        return self._instances + attrs
+
+
+# XXX consider adding in a cache
+# maybe this could be implemented more elegantly as a generator?
+# XXX consider leveraging node.listchain()
+# here instead of recursing..
+def get_path(nodes, path=(), _node_cache={}):
+    '''return all parent objs of this node up to the root/session'''
+    node = nodes[0]  # the most recently prefixed node
+    newnodes = ()
+    try:
+        name = node._obj.__name__
+        # print("__name__ is {}".format(name))
+        if '.' in name and isinstance(node, _pytest.python.Module):  # packaged module
+            pkgname = node._obj.__package__
+            prefix = tuple(name.split('.'))
+            lpath = node.fspath
+            for level in reversed(prefix[:-1]):
+                lpath = lpath.join('../')
+                newnodes = (Package(level, lpath, node),) + newnodes
+        elif isinstance(node, _pytest.python.Function):
+            print("function name is {}".format(name))
+            name = node.name
+            if '[' in name:
+                name = name.split('[')[0]
+            # else:
+            #     name = node._obj.__name__
+            newnodes = (ParametrizedFunc(name, node),) + newnodes
+            prefix = (name,)
+        else:
+            prefix = (name,)  # pack
+    except AttributeError as ae:  # when either Instance or non-packaged module
+        if isinstance(node, _pytest.python.Instance):
+            prefix = ('Instance',)  # don't bother with the instance node/step
+        else :  # should never get here
+            raise ae
+
+    newnodes = (node.parent,) + newnodes
+    # edge case (the root/session)
+    if node.parent.nodeid == _root_id:
+        return newnodes + nodes, (_root_id,) + prefix + path
+    # normal case
+    if node.parent:
+        return get_path(newnodes + nodes, path=prefix + path)
+    else:
+        raise ValueError("node '{}' has no parent?!".format(node))
+
+
 class TestTree(object):
     def __init__(self, funcitems, ipshell):
         self._shell = ipshell
@@ -106,9 +131,10 @@ class TestTree(object):
         self._path2funcs = OrderedDefaultdict(set)
         self._path2children = defaultdict(set)
         self._nodes = {}
+        self._cache = {}
         for item in funcitems:
             # print(item)
-            nodes, path = get_path((item,))
+            nodes, path = get_path((item,), _node_cache=self._nodes)
             for i, (key, node) in enumerate(zip(path, nodes), 1):
                 loc = path[:i]
                 child = path[:i+1]
@@ -139,8 +165,10 @@ class TestTree(object):
         return dir(self._root) + attrs
 
     def _runall(self, path):
-        funcitems = self._path2funcs[path]
-        self._funcitems[:] = funcitems
+        # XXX can this selection remain ordered to avoid
+        # traversing the list again?...imagined speed gain in my head?
+        items = self._path2funcs[path]
+        self._funcitems[:] = [f for f in self._funcitems if f in items]
         self._shell.exit()
 
 
@@ -160,11 +188,11 @@ class Node(object):
         except AttributeError as ae:
             try:
                 self._get_node(self._path + (attr,))
-                return self._new(attr)
+                return self._sub(attr)
             except TypeError:
                 raise ae
             except KeyError:
-                raise AttributeError("Node '{}' does not exist".format(attr))
+                raise AttributeError("sub-node '{}' can not be found".format(attr))
 
     def _get_node(self, path=None):
         if not path:
@@ -173,13 +201,13 @@ class Node(object):
 
     _node = property(_get_node)
 
-    def _new(self, key):
-        'return a new node'
+    def _sub(self, key):
+        'return a (new/cached) sub node'
         if key is 'parent':
             path = self._path[:-1]
         else:
             path = self._path + (key,)
-        return type(self)(self._tree, path)
+        return self._tree._cache.setdefault(path, type(self)(self._tree, path))
 
     def __call__(self):
         'Run all tests under this node'
