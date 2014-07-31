@@ -19,13 +19,13 @@ def pytest_keyboard_interrupt(excinfo):
 def pytest_collection_modifyitems(session, config, items):
     """called after collection has been performed, may filter or re-order
     the items in-place."""
-    if not config.option.interactive:
+    if not (config.option.interactive and items) or config.option.collectonly:
         return
 
     # prep and embed ipython
     from IPython.terminal.embed import InteractiveShellEmbed
     ipshell = InteractiveShellEmbed(banner1='Entering IPython workspace...',
-                                  exit_msg='Leaving interpreter starting pytest run')
+                                  exit_msg='Exiting IPython, beginning pytest run...')
 
     # build a tree of test items
     tt = TestTree(items, ipshell)
@@ -34,6 +34,10 @@ def pytest_collection_modifyitems(session, config, items):
             "collection tree.\n"
             "When finshed navigating to a test node, simply call it to have "
             "pytest invoke all tests under that node.")
+
+    # don't run any tests by default
+    if not tt._selected and not config.option.collectonly:
+        items[:] = []
 
 
 # borrowed from:
@@ -82,7 +86,7 @@ class ParametrizedFunc(object):
 # maybe this could be implemented more elegantly as a generator?
 # XXX consider leveraging node.listchain()
 # here instead of recursing..
-def get_path(nodes, path=(), _node_cache={}):
+def build_path(nodes, path=(), _node_cache={}):
     '''return all parent objs of this node up to the root/session'''
     node = nodes[0]  # the most recently prefixed node
     newnodes = ()
@@ -97,7 +101,7 @@ def get_path(nodes, path=(), _node_cache={}):
                 lpath = lpath.join('../')
                 newnodes = (Package(level, lpath, node),) + newnodes
         elif isinstance(node, _pytest.python.Function):
-            print("function name is {}".format(name))
+            # print("function name is {}".format(name))
             name = node.name
             if '[' in name:
                 name = name.split('[')[0]
@@ -119,7 +123,7 @@ def get_path(nodes, path=(), _node_cache={}):
         return newnodes + nodes, (_root_id,) + prefix + path
     # normal case
     if node.parent:
-        return get_path(newnodes + nodes, path=prefix + path)
+        return build_path(newnodes + nodes, path=prefix + path)
     else:
         raise ValueError("node '{}' has no parent?!".format(node))
 
@@ -128,18 +132,19 @@ class TestTree(object):
     def __init__(self, funcitems, ipshell):
         self._shell = ipshell
         self._funcitems = funcitems  # never modify this
-        self._path2funcs = OrderedDefaultdict(set)
+        self._path2items = OrderedDefaultdict(set)
         self._path2children = defaultdict(set)
+        self._selected = False
         self._nodes = {}
         self._cache = {}
         for item in funcitems:
             # print(item)
-            nodes, path = get_path((item,), _node_cache=self._nodes)
+            nodes, path = build_path((item,), _node_cache=self._nodes)
             for i, (key, node) in enumerate(zip(path, nodes), 1):
                 loc = path[:i]
                 child = path[:i+1]
                 # print(loc)
-                self._path2funcs[loc].add(item)
+                self._path2items[loc].add(item)
                 if loc != child:
                     self._path2children[loc].add(child)
                     # print(child)
@@ -167,8 +172,10 @@ class TestTree(object):
     def _runall(self, path):
         # XXX can this selection remain ordered to avoid
         # traversing the list again?...imagined speed gain in my head?
-        items = self._path2funcs[path]
+        items = self._path2items[path]
         self._funcitems[:] = [f for f in self._funcitems if f in items]
+        if not self._selected:
+            self._selected = True
         self._shell.exit()
 
 
@@ -200,6 +207,11 @@ class Node(object):
         return self._tree._nodes[path]
 
     _node = property(_get_node)
+
+    def _get_items(self):
+        return self._tree._path2items[self._path]
+
+    _items = property(_get_items)
 
     def _sub(self, key):
         'return a (new/cached) sub node'
