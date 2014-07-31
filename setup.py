@@ -8,12 +8,12 @@ setup(
      license='MIT',
      author='tyler goodlet',
      author_email='tgoodlet@gmail.com',
-     url='http://',
+     url='https://github.com/tgoodlet/pytest-interactive',
      platforms=['linux'],
      packages = ['interactive'],
      entry_points = {'pytest11': ['interactive = interactive.plugin'],},
      zip_safe=False,
-     install_requires = ['pytest>=2.4.2'],
+     install_requires = ['pytest>=2.4.2', 'ipython'],
      classifiers=[
      'Development Status :: 3 - Alpha',
      'Intended Audience :: Developers',
@@ -27,4 +27,4 @@ setup(
      'Programming Language :: Python',
      'Programming Language :: Python :: 3',
      ],
- )
+)
