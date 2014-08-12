@@ -16,6 +16,7 @@ def pytest_keyboard_interrupt(excinfo):
     pytest.set_trace()
 
 
+
 def pytest_collection_modifyitems(session, config, items):
     """called after collection has been performed, may filter or re-order
     the items in-place."""
@@ -24,7 +25,21 @@ def pytest_collection_modifyitems(session, config, items):
 
     # prep and embed ipython
     from IPython.terminal.embed import InteractiveShellEmbed
-    ipshell = InteractiveShellEmbed(banner1='Entering IPython workspace...',
+    class PytestShellEmbed(InteractiveShellEmbed):
+        def exit(self):
+            """Handle interactive exit.
+            This method calls the ask_exit callback."""
+            if self.test_items:
+                # TODO: maybe list the tests first then count and ask?
+                msg = "You have selected the following {} test(s) to be run:"\
+                      "\n{}\nWould you like to run these tests now? ([y]/n)?"\
+                      .format(len(self.test_items), self.test_items)
+            else:
+                msg = 'Do you really want to exit ([y]/n)?'
+            if self.ask_yes_no(msg,'y'):
+                self.ask_exit()
+
+    ipshell = PytestShellEmbed(banner1='Entering IPython workspace...',
                                   exit_msg='Exiting IPython, beginning pytest run...')
 
     # build a tree of test items
@@ -34,6 +49,7 @@ def pytest_collection_modifyitems(session, config, items):
             "collection tree.\n"
             "When finshed navigating to a test node, simply call it to have "
             "pytest invoke all tests under that node.")
+    items[:] = tt.selection[:]
 
     # don't run any tests by default
     if not tt._selected and not config.option.collectonly:
@@ -68,17 +84,17 @@ class OrderedDefaultdict(OrderedDict):
 
 _root_id = '.'
 Package = namedtuple('Package', 'name path node')
-# Directory = namedtuple('Directory', 'name path node')
-# ParametrizedFunc = namedtuple('ParametrizedFunc', 'name count')
+
 
 class ParametrizedFunc(object):
-    def __init__(self, name, instances):
+    def __init__(self, name, instances, parent):
         if not isinstance(instances, list):
             instances = [instances]
         self._instances = instances
+        self.parent = parent
 
     def __dir__(self):
-        attrs = sorted(set(dir(type(self)) + self.__dict__.keys()))
+        attrs = sorted(set(dir(type(self)) + list(self.__dict__.keys())))
         return self._instances + attrs
 
 
@@ -107,7 +123,8 @@ def build_path(nodes, path=(), _node_cache={}):
                 name = name.split('[')[0]
             # else:
             #     name = node._obj.__name__
-            newnodes = (ParametrizedFunc(name, node),) + newnodes
+            pf = ParametrizedFunc(name, node, node.parent
+            newnodes = (pf,) + newnodes
             prefix = (name,)
         else:
             prefix = (name,)  # pack
@@ -132,6 +149,7 @@ class TestTree(object):
     def __init__(self, funcitems, ipshell):
         self._shell = ipshell
         self._funcitems = funcitems  # never modify this
+        self.selection = []
         self._path2items = OrderedDefaultdict(set)
         self._path2children = defaultdict(set)
         self._selected = False
@@ -166,16 +184,21 @@ class TestTree(object):
                 raise ae
 
     def __dir__(self, key=None):
-        attrs = sorted(set(dir(type(self)) + self.__dict__.keys()))
+        attrs = sorted(set(dir(type(self)) + list(self.__dict__.keys())))
         return dir(self._root) + attrs
 
     def _runall(self, path):
         # XXX can this selection remain ordered to avoid
         # traversing the list again?...imagined speed gain in my head?
         items = self._path2items[path]
-        self._funcitems[:] = [f for f in self._funcitems if f in items]
+        if not self.selection:
+            self.selection = [f for f in self._funcitems if f in items]
+        else:
+            self.selection.extend([f for f in self._funcitems if f in items])
+
         if not self._selected:
             self._selected = True
+        self._shell.test_items = self.selection
         self._shell.exit()
 
 
