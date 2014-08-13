@@ -3,6 +3,7 @@ outstandings:
 - select subsets of a parametrized test instances
   -> organize by fixture, parametrize call?
 - allow for index/slice selection of any test subset
+- pytest session time shouldn't include ipython time??
 
 features:
 - show item selection in the ipython prompt
