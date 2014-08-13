@@ -1,20 +1,18 @@
-import sys
 import _pytest
 import pytest
-import IPython
-import types
-from collections import OrderedDict, namedtuple, defaultdict
+from collections import OrderedDict, namedtuple
+
 
 def pytest_addoption(parser):
     parser.addoption("--i", "--interactive", action="store_true",
-            dest='interactive',
-            help="enable iteractive selection of tests after collection")
+                     dest='interactive',
+                     help="enable iteractive selection of tests after"
+                     " collection")
 
 
 def pytest_keyboard_interrupt(excinfo):
     'enter the debugger on keyboard interrupt'
     pytest.set_trace()
-
 
 
 def pytest_collection_modifyitems(session, config, items):
@@ -25,7 +23,9 @@ def pytest_collection_modifyitems(session, config, items):
 
     # prep and embed ipython
     from IPython.terminal.embed import InteractiveShellEmbed
+
     class PytestShellEmbed(InteractiveShellEmbed):
+
         def exit(self):
             """Handle interactive exit.
             This method calls the ask_exit callback."""
@@ -36,11 +36,11 @@ def pytest_collection_modifyitems(session, config, items):
                       .format(self.test_items, len(self.test_items))
             else:
                 msg = 'Do you really want to exit ([y]/n)?'
-            if self.ask_yes_no(msg,'y'):
+            if self.ask_yes_no(msg, 'y'):
                 self.ask_exit()
 
     ipshell = PytestShellEmbed(banner1='Entering IPython workspace...',
-                                  exit_msg='Exiting IPython...')
+                               exit_msg='Exiting IPython...')
 
     # build a tree of test items
     tt = TestTree(items, ipshell)
@@ -83,7 +83,8 @@ def gen_path(item, cache):
     for node in chain:
         try:
             name = node._obj.__name__
-        except AttributeError as ae:  # when either Instance or non-packaged module
+        except AttributeError as ae:
+            # when either Instance or non-packaged module
             if isinstance(node, _pytest.python.Instance):
                 name = 'Instance'  # instances should be named as such
             elif node.nodeid is _root_id:
@@ -126,7 +127,7 @@ class TestTree(object):
         self._funcitems = funcitems  # never modify this
         self.selection = []
         self._path2items = OrderedDict()
-        self._path2children = {} #defaultdict(set)
+        self._path2children = {}  # defaultdict(set)
         self._selected = False
         self._nodes = {}
         self._cache = {}
@@ -197,7 +198,8 @@ class Node(object):
             except TypeError:
                 raise ae
             except KeyError:
-                raise AttributeError("sub-node '{}' can not be found".format(attr))
+                raise AttributeError("sub-node '{}' can not be found"
+                                     .format(attr))
 
     def _get_node(self, path=None):
         if not path:
