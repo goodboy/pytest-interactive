@@ -1,5 +1,6 @@
 import _pytest
 import pytest
+import pprint
 from collections import OrderedDict, namedtuple
 
 
@@ -40,19 +41,29 @@ def pytest_collection_modifyitems(session, config, items):
                 self.ask_exit()
 
     ipshell = PytestShellEmbed(banner1='Entering IPython workspace...',
-                               exit_msg='Exiting IPython...')
-
+                               exit_msg='Exiting IPython...Running pytest')
     # build a tree of test items
     tt = TestTree(items, ipshell)
+
+    # set the prompt to track number of selected test items
+    pm = ipshell.prompt_manager
+    bold_prmpt = '{color.number}' '{tt}' '{color.prompt}'
+    pm.in_template = "'{}' tests selected >>> ".format(bold_prmpt)
+    # don't justify with preceding 'in' prompt
+    pm.justify = False
+
+    # embed
     ipshell("Welcome to pytest-interactive, the pytest + ipython sensation.\n"
-            "Please explore the test (collection) tree using tt.<tab>\n"
+            "Please explore the test (collection) tree using tt.<TAB>\n"
             "When finshed tabbing to a test node, simply call it to have "
             "pytest invoke all tests selected under that node.")
+
+    # make selection
     items[:] = tt.selection[:]
 
     # don't run any tests by default
-    if not tt._selected and not config.option.collectonly:
-        items[:] = []
+    # if not tt._selected and not config.option.collectonly:
+    #     items[:] = []
 
 
 _root_id = '.'
@@ -60,26 +71,30 @@ Package = namedtuple('Package', 'name path node parent')
 
 
 class ParametrizedFunc(object):
-    def __init__(self, name, instances, parent):
-        self._instances = OrderedDict()
+    def __init__(self, name, funcitems, parent):
+        self._funcitems = OrderedDict()
         self.parent = parent
-        if not isinstance(instances, list):
-            instances = [instances]
+        if not isinstance(funcitems, list):
+            instances = [funcitems]
         for item in instances:
             self.append(item)
 
     def append(self, item):
-        self._instances[item._genid] = item
+        self._funcitems[item._genid] = item
+
+    def __getitem__(self, key):
+        return self._funcitems[key]
 
     def __dir__(self):
         attrs = sorted(set(dir(type(self)) + list(self.__dict__.keys())))
-        return self._instances + attrs
+        return self._funcitems + attrs
 
 
-def gen_path(item, cache):
+def gen_nodes(item, cache):
     '''generate all parent objs of this node up to the root/session'''
     path = ()
-    chain = item.listchain()  # lists branch items in order
+    # pytest call which lists branch items in order
+    chain = item.listchain()
     for node in chain:
         try:
             name = node._obj.__name__
@@ -93,7 +108,6 @@ def gen_path(item, cache):
                 raise ae
         # packaged module
         if '.' in name and isinstance(node, _pytest.python.Module):
-            # pkgname = node._obj.__package__
             prefix = tuple(name.split('.'))
             lpath = node.fspath
             # don't include the mod name in path
@@ -104,7 +118,6 @@ def gen_path(item, cache):
             name = prefix[-1]  # this mod's name
         # func item
         elif isinstance(node, _pytest.python.Function):
-            # print("function name is {}".format(name))
             name = node.name
             if '[' in name:
                 funcname = name.split('[')[0]
@@ -123,7 +136,6 @@ def gen_path(item, cache):
 
 class TestTree(object):
     def __init__(self, funcitems, ipshell):
-        self._shell = ipshell
         self._funcitems = funcitems  # never modify this
         self.selection = []
         self._path2items = OrderedDict()
@@ -132,17 +144,23 @@ class TestTree(object):
         self._nodes = {}
         self._cache = {}
         for item in funcitems:
-            for path, node in gen_path(item, self._nodes):
-                self._path2items.setdefault(path, set()).add(item)
+            for path, node in gen_nodes(item, self._nodes):
+                self._path2items.setdefault(path, list()).append(item)
                 if path not in self._nodes:
                     self._nodes[path] = node
                     self._path2children.setdefault(path[:-1], set()).add(path)
-
         self._root = Node(self, (_root_id,))
 
-    def _get_children(self, path):
-        'return all children for the node given by path'
-        return self._path2children[path]
+        # ipython shell
+        self._shell = ipshell
+
+    def __str__(self):
+        '''stringify current selection length'''
+        return str(len(self.selection))
+
+    # def _get_children(self, path):
+    #     'return all children for the node given by path'
+    #     return self._path2children[path]
 
     def __getattr__(self, key):
         try:
@@ -173,6 +191,10 @@ class TestTree(object):
 
 
 class Node(object):
+    '''Represent a pytest node/item for use as a tab complete-able object
+    with ipython. An internal reference is kept to the real Node.
+    Most operations are delegated to the supervising TestTree.
+    '''
     def __init__(self, tree, path):
         self._tree = tree
         self._path = path
@@ -186,7 +208,18 @@ class Node(object):
 
     @property
     def _children(self):
-        return self._tree._get_children(self._path)
+        return self._tree._path2children[self._path]
+
+    def _get_items(self):
+        return self._tree._path2items[self._path]
+
+    _items = property(_get_items)
+
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            self._tree.selection.append(self._items[key])
+        if isinstance(key, slice):
+            self._tree.selection.extend(self._items[key])
 
     def __getattr__(self, attr):
         try:
@@ -201,17 +234,19 @@ class Node(object):
                 raise AttributeError("sub-node '{}' can not be found"
                                      .format(attr))
 
+    def show(self):
+        """Show all test items under this node on the console
+        """
+        # pprint.pprint(
+        # for child in self._childen
+        pprint.pprint([node.nodeid for node in self._items])
+
     def _get_node(self, path=None):
         if not path:
             path = self._path
         return self._tree._nodes[path]
 
     _node = property(_get_node)
-
-    def _get_items(self):
-        return self._tree._path2items[self._path]
-
-    _items = property(_get_items)
 
     def _sub(self, key):
         'return a (new/cached) sub node'
