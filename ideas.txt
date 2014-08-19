@@ -6,12 +6,14 @@ outstandings:
 - pytest session time shouldn't include ipython time??
 
 features:
+- history from this shell saved for exclusive re-use
 - show item selection in the ipython prompt
 - ability to invoke fixtures for a test from ipshell
   -> switch to state A, run some tests, restore, switch to state B
      run some other tests...etc.
 - rerun the last pytest selection without exitting from the parent
   process (i.e. resume the ipshell with it's current state
+  -> is there a way to save this state across pytest sessions/processes?
 - when debugger is hit offer a list of fixturevalues which can be
   played with to see the state of resources/devices involved in the test
   -> maybe allow user to enter into the previous ipshell+state?

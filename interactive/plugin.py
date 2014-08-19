@@ -5,7 +5,7 @@ from collections import OrderedDict, namedtuple
 
 
 def pytest_addoption(parser):
-    parser.addoption("--i", "--interactive", action="store_true",
+    parser.addoption("--interactive", "--ia", action="store_true",
                      dest='interactive',
                      help="enable iteractive selection of tests after"
                      " collection")
@@ -33,7 +33,7 @@ def pytest_collection_modifyitems(session, config, items):
             if getattr(self, 'test_items', None):
                 # TODO: maybe list the tests first then count and ask?
                 msg = "{}\nYou have selected the above {} test(s) to be run."\
-                      "\nWould you like to run these tests now? ([y]/n)?"\
+                      "\nWould you like to run pytest now? ([y]/n)?"\
                       .format(self.test_items, len(self.test_items))
             else:
                 msg = 'Do you really want to exit ([y]/n)?'
@@ -153,6 +153,7 @@ class TestTree(object):
 
         # ipython shell
         self._shell = ipshell
+        self._shell.test_items = self.selection
 
     def __str__(self):
         '''stringify current selection length'''
@@ -175,18 +176,15 @@ class TestTree(object):
         attrs = sorted(set(dir(type(self)) + list(self.__dict__.keys())))
         return dir(self._root) + attrs
 
-    def _runall(self, path):
+    def _runall(self, path=None):
         # XXX can this selection remain ordered to avoid
         # traversing the list again?...imagined speed gain in my head?
-        items = self._path2items[path]
-        if not self.selection:
-            self.selection = [f for f in self._funcitems if f in items]
-        else:
+        if path:
+            items = self._path2items[path]
             self.selection.extend([f for f in self._funcitems if f in items])
 
         if not self._selected:
             self._selected = True
-        self._shell.test_items = self.selection
         self._shell.exit()
 
 
@@ -220,6 +218,15 @@ class Node(object):
             self._tree.selection.append(self._items[key])
         if isinstance(key, slice):
             self._tree.selection.extend(self._items[key])
+
+    def __call__(self, key=None):
+        """Run all tests under this node"""
+        if key is None:
+            path = self._path
+        else:
+            path = None
+            self[key]
+        return self._tree._runall(path)
 
     def __getattr__(self, attr):
         try:
@@ -255,7 +262,3 @@ class Node(object):
         else:
             path = self._path + (key,)
         return self._tree._cache.setdefault(path, type(self)(self._tree, path))
-
-    def __call__(self):
-        'Run all tests under this node'
-        return self._tree._runall(self._path)
