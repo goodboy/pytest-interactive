@@ -34,7 +34,7 @@ def pytest_collection_modifyitems(session, config, items):
                 # TODO: maybe list the tests first then count and ask?
                 msg = "{}\nYou have selected the above {} test(s) to be run."\
                       "\nWould you like to run pytest now? ([y]/n)?"\
-                      .format(self.test_items, len(self.test_items))
+                      .format(self.test_items.keys(), len(self.test_items))
             else:
                 msg = 'Do you really want to exit ([y]/n)?'
             if self.ask_yes_no(msg, 'y'):
@@ -59,7 +59,7 @@ def pytest_collection_modifyitems(session, config, items):
             "pytest invoke all tests selected under that node.")
 
     # make selection
-    items[:] = tt.selection[:]
+    items[:] = tt.selection.values()[:]
 
     # don't run any tests by default
     # if not tt._selected and not config.option.collectonly:
@@ -137,7 +137,7 @@ def gen_nodes(item, cache):
 class TestTree(object):
     def __init__(self, funcitems, ipshell):
         self._funcitems = funcitems  # never modify this
-        self.selection = []
+        self.selection = OrderedDict()  # items must be unique
         self._path2items = OrderedDict()
         self._path2children = {}  # defaultdict(set)
         self._selected = False
@@ -180,8 +180,10 @@ class TestTree(object):
         # XXX can this selection remain ordered to avoid
         # traversing the list again?...imagined speed gain in my head?
         if path:
-            items = self._path2items[path]
-            self.selection.extend([f for f in self._funcitems if f in items])
+            # items = self._path2items[path]
+            for item in self._path2items[path]:
+                self.selection[item.nodeid] = item
+            # self.selection.extend([f for f in self._funcitems if f in items])
 
         if not self._selected:
             self._selected = True
@@ -215,9 +217,14 @@ class Node(object):
 
     def __getitem__(self, key):
         if isinstance(key, int):
-            self._tree.selection.append(self._items[key])
+            item = self._items[key]
+            # self._tree.selection.append(self._items[key])
+            self._tree.selection[item.nodeid] = item
         if isinstance(key, slice):
-            self._tree.selection.extend(self._items[key])
+            # self._tree.selection.extend(self._items[key])
+            items = self._items[key]
+            for item in items:
+                self._tree.selection[item.nodeid] = item
 
     def __call__(self, key=None):
         """Run all tests under this node"""
@@ -225,7 +232,7 @@ class Node(object):
             path = self._path
         else:
             path = None
-            self[key]
+            self[key]  # select tests specified by key
         return self._tree._runall(path)
 
     def __getattr__(self, attr):
