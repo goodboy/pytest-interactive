@@ -2,6 +2,24 @@ import _pytest
 import pytest
 import pprint
 from collections import OrderedDict, namedtuple
+from IPython.terminal.embed import InteractiveShellEmbed
+
+
+class PytestShellEmbed(InteractiveShellEmbed):
+
+    def exit(self):
+        """Handle interactive exit.
+        This method calls the ask_exit callback.
+        """
+        if getattr(self, 'test_items', None):
+            print(" \n".join(self.test_items.keys()))
+            msg = "You have selected the above {} test(s) to be run."\
+                  "\nWould you like to run pytest now? ([y]/n)?"\
+                  .format(len(self.test_items))
+        else:
+            msg = 'Do you really want to exit ([y]/n)?'
+        if self.ask_yes_no(msg, 'y'):
+            self.ask_exit()
 
 
 def pytest_addoption(parser):
@@ -17,53 +35,42 @@ def pytest_keyboard_interrupt(excinfo):
 
 
 def pytest_collection_modifyitems(session, config, items):
-    """called after collection has been performed, may filter or re-order
-    the items in-place."""
+    """
+    called after collection has been performed, may filter or re-order
+    the items in-place.
+    """
     if not (config.option.interactive and items):
         return
 
     # prep and embed ipython
-    from IPython.terminal.embed import InteractiveShellEmbed
-
-    class PytestShellEmbed(InteractiveShellEmbed):
-
-        def exit(self):
-            """Handle interactive exit.
-            This method calls the ask_exit callback."""
-            if getattr(self, 'test_items', None):
-                # TODO: maybe list the tests first then count and ask?
-                msg = "{}\nYou have selected the above {} test(s) to be run."\
-                      "\nWould you like to run pytest now? ([y]/n)?"\
-                      .format(self.test_items.keys(), len(self.test_items))
-            else:
-                msg = 'Do you really want to exit ([y]/n)?'
-            if self.ask_yes_no(msg, 'y'):
-                self.ask_exit()
-
     ipshell = PytestShellEmbed(banner1='Entering IPython workspace...',
                                exit_msg='Exiting IPython...Running pytest')
     # build a tree of test items
     tt = TestTree(items, ipshell)
 
+    # FIXME: can we operate on the cls directly and avoid
+    # poluting our namespace with items?
     # set the prompt to track number of selected test items
     pm = ipshell.prompt_manager
     bold_prmpt = '{color.number}' '{tt}' '{color.prompt}'
-    pm.in_template = "'{}' tests selected >>> ".format(bold_prmpt)
-    # don't justify with preceding 'in' prompt
+    pm.in_template = "'{}' selected >>> ".format(bold_prmpt)
+    # don't rjustify with preceding 'in' prompt
     pm.justify = False
 
+    msg = """Welcome to pytest-interactive, the pytest + ipython sensation.\n
+Please explore the test (collection) tree using tt.<TAB>\n
+When finshed tabbing to a test node, simply call it to have
+pytest invoke all tests selected under that node."""
+
+    def embed(tt, items):
+        # FIXME: can we add the startup banner before the call?
+        ipshell(msg)
+
     # embed
-    ipshell("Welcome to pytest-interactive, the pytest + ipython sensation.\n"
-            "Please explore the test (collection) tree using tt.<TAB>\n"
-            "When finshed tabbing to a test node, simply call it to have "
-            "pytest invoke all tests selected under that node.")
+    embed(tt, items)
 
     # make selection
     items[:] = tt.selection.values()[:]
-
-    # don't run any tests by default
-    # if not tt._selected and not config.option.collectonly:
-    #     items[:] = []
 
 
 _root_id = '.'
@@ -72,7 +79,7 @@ Package = namedtuple('Package', 'name path node parent')
 
 class ParametrizedFunc(object):
     def __init__(self, name, funcitems, parent):
-        self._funcitems = OrderedDict()
+        self.funcitems = OrderedDict()
         self.parent = parent
         if not isinstance(funcitems, list):
             instances = [funcitems]
@@ -80,14 +87,15 @@ class ParametrizedFunc(object):
             self.append(item)
 
     def append(self, item):
-        self._funcitems[item._genid] = item
+        self.funcitems[item.callspec.id] = item
 
     def __getitem__(self, key):
-        return self._funcitems[key]
+        return self.funcitems[key]
 
     def __dir__(self):
-        attrs = sorted(set(dir(type(self)) + list(self.__dict__.keys())))
-        return self._funcitems + attrs
+        attrs = sorted(set(dir(type(self)) +
+                       list(self.__dict__.keys())))
+        return self.funcitems.keys() + attrs
 
 
 def gen_nodes(item, cache):
@@ -101,20 +109,26 @@ def gen_nodes(item, cache):
         except AttributeError as ae:
             # when either Instance or non-packaged module
             if isinstance(node, _pytest.python.Instance):
-                name = 'Instance'  # instances should be named as such
+            # leave out Instances, later versions are going to drop them anyway
+                continue
             elif node.nodeid is _root_id:
                 name = _root_id
             else:  # should never get here
                 raise ae
         # packaged module
         if '.' in name and isinstance(node, _pytest.python.Module):
+            # import ipdb
+            # ipdb.set_trace()
+            # FIXME: this should be cwd dependent!!!
+            # (i.e. don't add package objects we're below in the fs)
             prefix = tuple(name.split('.'))
             lpath = node.fspath
+            fspath = str(lpath)
             # don't include the mod name in path
             for level in prefix[:-1]:
-                lpath = lpath.join(level)
+                name = '{}{}'.format(fspath[:fspath.index(level)], level)
                 path += (level,)
-                yield path, Package(level, lpath, node, node.parent)
+                yield path, Package(name, lpath, node, node.parent)
             name = prefix[-1]  # this mod's name
         # func item
         elif isinstance(node, _pytest.python.Function):
@@ -140,12 +154,14 @@ class TestTree(object):
         self.selection = OrderedDict()  # items must be unique
         self._path2items = OrderedDict()
         self._path2children = {}  # defaultdict(set)
+        self._sp2items = {}  # selection property to items
         self._selected = False
         self._nodes = {}
         self._cache = {}
         for item in funcitems:
             for path, node in gen_nodes(item, self._nodes):
                 self._path2items.setdefault(path, list()).append(item)
+                # self._sp2items
                 if path not in self._nodes:
                     self._nodes[path] = node
                     self._path2children.setdefault(path[:-1], set()).add(path)
@@ -192,8 +208,8 @@ class TestTree(object):
 
 class Node(object):
     '''Represent a pytest node/item for use as a tab complete-able object
-    with ipython. An internal reference is kept to the real Node.
-    Most operations are delegated to the supervising TestTree.
+    for use with ipython. An internal reference is kept to the real Node.
+    Most operations are delegated to the containing TestTree.
     '''
     def __init__(self, tree, path):
         self._tree = tree
@@ -205,6 +221,12 @@ class Node(object):
             return self._node._instances.keys()
         else:
             return sorted([key[self._len] for key in self._children])
+
+    def __repr__(self):
+        clsname = self._node.__class__.__name__
+        nodename = getattr(self._node, 'name', None)
+        return "<{} '{}' -> {} tests>".format(str(clsname), nodename,
+                                              len(self._items))
 
     @property
     def _children(self):
