@@ -1,8 +1,10 @@
 import _pytest
 import pytest
 import pprint
+import operator
 from collections import OrderedDict, namedtuple
 from IPython.terminal.embed import InteractiveShellEmbed
+from IPython.core.magic import (Magics, magics_class, line_magic)
 
 
 class PytestShellEmbed(InteractiveShellEmbed):
@@ -20,6 +22,28 @@ class PytestShellEmbed(InteractiveShellEmbed):
             msg = 'Do you really want to exit ([y]/n)?'
         if self.ask_yes_no(msg, 'y'):
             self.ask_exit()
+
+
+@magics_class
+class SelectionMagics(Magics):
+
+    @line_magic
+    def add(self, line):
+        'add tests to the current selection'
+        root, sep, tail = line.partition('.')
+        obj = self.shell.user_ns[root]
+        ts = operator.attrgetter(tail)(obj)
+        return ts
+
+    @line_magic
+    def remove(self, line):
+        'remove tests from the current selection'
+        return line
+
+    @line_magic
+    def show(self, line):
+        'show all currently selected test'
+        return line
 
 
 def pytest_addoption(parser):
@@ -45,6 +69,7 @@ def pytest_collection_modifyitems(session, config, items):
     # prep and embed ipython
     ipshell = PytestShellEmbed(banner1='Entering IPython workspace...',
                                exit_msg='Exiting IPython...Running pytest')
+    ipshell.register_magics(SelectionMagics)
     # build a tree of test items
     tt = TestTree(items, ipshell)
 
@@ -62,15 +87,13 @@ Please explore the test (collection) tree using tt.<TAB>\n
 When finshed tabbing to a test node, simply call it to have
 pytest invoke all tests selected under that node."""
 
-    def embed(tt, items):
-        # FIXME: can we add the startup banner before the call?
-        ipshell(msg)
-
-    # embed
-    embed(tt, items)
+    ipshell(msg, local_ns={'tt': tt, 'ipshell': ipshell})
 
     # make selection
-    items[:] = tt.selection.values()[:]
+    if tt.selection:
+        items[:] = tt.selection.values()[:]
+    else:
+        items[:] = []
 
 
 _root_id = '.'
@@ -101,7 +124,7 @@ class ParametrizedFunc(object):
 def gen_nodes(item, cache):
     '''generate all parent objs of this node up to the root/session'''
     path = ()
-    # pytest call which lists branch items in order
+    # pytest call which lists path items in order
     chain = item.listchain()
     for node in chain:
         try:
@@ -155,7 +178,6 @@ class TestTree(object):
         self._path2items = OrderedDict()
         self._path2children = {}  # defaultdict(set)
         self._sp2items = {}  # selection property to items
-        self._selected = False
         self._nodes = {}
         self._cache = {}
         for item in funcitems:
@@ -165,7 +187,7 @@ class TestTree(object):
                 if path not in self._nodes:
                     self._nodes[path] = node
                     self._path2children.setdefault(path[:-1], set()).add(path)
-        self._root = Node(self, (_root_id,))
+        self._root = TestSet(self, (_root_id,))
 
         # ipython shell
         self._shell = ipshell
@@ -200,16 +222,14 @@ class TestTree(object):
             for item in self._path2items[path]:
                 self.selection[item.nodeid] = item
             # self.selection.extend([f for f in self._funcitems if f in items])
-
-        if not self._selected:
-            self._selected = True
         self._shell.exit()
 
 
-class Node(object):
-    '''Represent a pytest node/item for use as a tab complete-able object
-    for use with ipython. An internal reference is kept to the real Node.
-    Most operations are delegated to the containing TestTree.
+class TestSet(object):
+    '''Represent a pytest node/item tests set.
+    Use as a tab complete-able object in ipython.
+    An internal reference is kept to the pertaining pytest Node.
+    Hierarchical lookups are delegated to the containing TestTree.
     '''
     def __init__(self, tree, path):
         self._tree = tree
@@ -220,6 +240,7 @@ class Node(object):
         if isinstance(self._node, ParametrizedFunc):
             return self._node._instances.keys()
         else:
+            # return sorted list of child keys
             return sorted([key[self._len] for key in self._children])
 
     def __repr__(self):
@@ -262,7 +283,6 @@ class Node(object):
             object.__getattribute__(self, attr)
         except AttributeError as ae:
             try:
-                self._get_node(self._path + (attr,))
                 return self._sub(attr)
             except TypeError:
                 raise ae
@@ -285,9 +305,10 @@ class Node(object):
     _node = property(_get_node)
 
     def _sub(self, key):
-        'return a (new/cached) sub node'
+        'return a new subset/node'
         if key is 'parent':
             path = self._path[:-1]
         else:
             path = self._path + (key,)
+        self._get_node(path)
         return self._tree._cache.setdefault(path, type(self)(self._tree, path))
