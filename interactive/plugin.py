@@ -27,23 +27,45 @@ class PytestShellEmbed(InteractiveShellEmbed):
 @magics_class
 class SelectionMagics(Magics):
 
+    def _ns_lookup(self, line):
+        '''Look up an object in the embedded ns
+        and return it
+        '''
+        ns = self.shell.user_ns
+        try:
+            return eval(line, ns)
+        except NameError:
+            # FIXME: do we even need this?
+            root, sep, tail = line.partition('.')
+            obj = ns[root]
+            if tail:
+                obj = operator.attrgetter(tail)(obj)
+            return obj
+
+    @property
+    def selection(self):
+        return self._ns_lookup('tt.selection')
+
     @line_magic
     def add(self, line):
         'add tests to the current selection'
-        root, sep, tail = line.partition('.')
-        obj = self.shell.user_ns[root]
-        ts = operator.attrgetter(tail)(obj)
-        return ts
+        ts = self._ns_lookup(line)
+        self.selection.extend(ts)
 
     @line_magic
     def remove(self, line):
         'remove tests from the current selection'
-        return line
+        if ':' in line:
+            return line
+        else:
+            self.selection.clear()
+        # getter = operator.itemgetter(self.selection, line)
+        # self.selection.remove(self._ns_lookup(line))
 
     @line_magic
     def show(self, line):
-        'show all currently selected test'
-        return line
+        '''show all currently selected test'''
+        return self.selection.items()
 
 
 def pytest_addoption(parser):
@@ -91,7 +113,7 @@ pytest invoke all tests selected under that node."""
 
     # make selection
     if tt.selection:
-        items[:] = tt.selection.values()[:]
+        items[:] = list(tt.selection.values())[:]
     else:
         items[:] = []
 
@@ -171,10 +193,50 @@ def gen_nodes(item, cache):
         yield path, node
 
 
+# TODO: could this be unified with ParametrizedFunc ??
+class Selection(object):
+    def __init__(self):
+        self.funcitems = OrderedDict()
+
+    def append(self, item):
+        self.funcitems[item.nodeid] = item
+
+    def extend(self, test_set):
+        for item in test_set._items:
+            self.append(item)
+
+    def remove(self, test_set):
+        for item in test_set._items:
+            self.funcitems.pop(item.nodeid, None)
+
+    def clear(self):
+        self.funcitems.clear()
+
+    def keys(self):
+        return self.funcitems.keys()
+
+    def values(self):
+        return self.funcitems.values()
+
+    def __len__(self):
+        return len(self.funcitems)
+
+    def __getitem__(self, key):
+        return self.funcitems[key]
+
+    def __dir__(self):
+        attrs = sorted(set(dir(type(self)) +
+                       list(self.__dict__.keys())))
+        return self.funcitems.keys() + attrs
+
+    def items(self):
+        return [(i, node.nodeid) for i, node in enumerate(self.funcitems.values())]
+
+
 class TestTree(object):
     def __init__(self, funcitems, ipshell):
         self._funcitems = funcitems  # never modify this
-        self.selection = OrderedDict()  # items must be unique
+        self.selection = Selection()  # items must be unique
         self._path2items = OrderedDict()
         self._path2children = {}  # defaultdict(set)
         self._sp2items = {}  # selection property to items
@@ -212,7 +274,11 @@ class TestTree(object):
 
     def __dir__(self, key=None):
         attrs = sorted(set(dir(type(self)) + list(self.__dict__.keys())))
+        attrs.extend(sorted(set(dir(type(self._root)) + list(self._root.__dict__.keys()))))
         return dir(self._root) + attrs
+
+    def __repr__(self):
+        return repr(self._root)
 
     def _runall(self, path=None):
         # XXX can this selection remain ordered to avoid
@@ -231,10 +297,17 @@ class TestSet(object):
     An internal reference is kept to the pertaining pytest Node.
     Hierarchical lookups are delegated to the containing TestTree.
     '''
-    def __init__(self, tree, path):
+    def __init__(self, tree, path, indices=None):
         self._tree = tree
         self._path = path
         self._len = len(path)
+        if indices is None:
+            indices = slice(indices)
+        elif isinstance(indices, int):
+            # create a slice which will slice out a single element
+            # (the or expr is here for the indices = -1 case)
+            indices = slice(indices, indices + 1 or None)
+        self._ind = indices
 
     def __dir__(self):
         if isinstance(self._node, ParametrizedFunc):
@@ -254,20 +327,16 @@ class TestSet(object):
         return self._tree._path2children[self._path]
 
     def _get_items(self):
-        return self._tree._path2items[self._path]
+        return self._tree._path2items[self._path][self._ind]
 
     _items = property(_get_items)
 
+    def items(self):
+        # FIXME: this should return TestSets as values...
+        return [(i, node.nodeid) for i, node in enumerate(self._items)]
+
     def __getitem__(self, key):
-        if isinstance(key, int):
-            item = self._items[key]
-            # self._tree.selection.append(self._items[key])
-            self._tree.selection[item.nodeid] = item
-        if isinstance(key, slice):
-            # self._tree.selection.extend(self._items[key])
-            items = self._items[key]
-            for item in items:
-                self._tree.selection[item.nodeid] = item
+        return self._sub(key)
 
     def __call__(self, key=None):
         """Run all tests under this node"""
@@ -290,12 +359,10 @@ class TestSet(object):
                 raise AttributeError("sub-node '{}' can not be found"
                                      .format(attr))
 
-    def show(self):
-        """Show all test items under this node on the console
-        """
-        # pprint.pprint(
-        # for child in self._childen
-        pprint.pprint([node.nodeid for node in self._items])
+    # def show_items(self):
+    #     """Show all test items under this node on the console
+    #     """
+    #     pprint.pprint(self.items())
 
     def _get_node(self, path=None):
         if not path:
@@ -305,10 +372,23 @@ class TestSet(object):
     _node = property(_get_node)
 
     def _sub(self, key):
-        'return a new subset/node'
-        if key is 'parent':
-            path = self._path[:-1]
-        else:
-            path = self._path + (key,)
-        self._get_node(path)
-        return self._tree._cache.setdefault(path, type(self)(self._tree, path))
+        '''Return a new subset/node
+        '''
+        if isinstance(key, str):
+            if key is 'parent':
+                path = self._path[:-1]
+            else:
+                path = self._path + (key,)
+            # no slice and use path as cache key
+            ind = None
+            ckey = path
+            # ensure sub-node with name exists
+            self._get_node(path)
+        elif isinstance(key, (int, slice)):
+            path = self._path
+            ind = key
+            ckey = (path, str(key))
+        return self._tree._cache.setdefault(
+            ckey, type(self)(
+                self._tree, path, indices=ind)
+            )

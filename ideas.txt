@@ -2,8 +2,10 @@
 outstandings:
 - select subsets of a parametrized test instances
   -> organize by fixture, parametrize call?
-- allow for index/slice selection of any test subset
 - pytest session time shouldn't include ipython time??
+- move ipshell stuff to separate module and only load when
+  config.capture != 'no'
+DONE - allow for index/slice selection of any test subset
 
 features:
 - history from this shell saved for exclusive re-use
