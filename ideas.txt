@@ -8,6 +8,8 @@ outstandings:
 DONE - allow for index/slice selection of any test subset
 
 features:
+- instead of 'tt' as the base ref why not use the test dir name?
+ -> obvs means announcing it at the splash and inserting it in the shell ns
 - history from this shell saved for exclusive re-use
 - show item selection in the ipython prompt
 - ability to invoke fixtures for a test from ipshell
