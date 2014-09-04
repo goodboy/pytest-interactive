@@ -50,7 +50,7 @@ class SelectionMagics(Magics):
     def add(self, line):
         'add tests to the current selection'
         ts = self._ns_lookup(line)
-        self.selection.extend(ts)
+        self.selection.addtests(ts)
 
     @line_magic
     def remove(self, line):
@@ -138,8 +138,7 @@ class ParametrizedFunc(object):
         return self.funcitems[key]
 
     def __dir__(self):
-        attrs = sorted(set(dir(type(self)) +
-                       list(self.__dict__.keys())))
+        attrs = dirinfo(self)
         return self.funcitems.keys() + attrs
 
 
@@ -154,12 +153,14 @@ def gen_nodes(item, cache):
         except AttributeError as ae:
             # when either Instance or non-packaged module
             if isinstance(node, _pytest.python.Instance):
-            # leave out Instances, later versions are going to drop them anyway
+                # leave out Instances, later versions are going to drop them
+                # anyway
                 continue
             elif node.nodeid is _root_id:
                 name = _root_id
-            else:  # should never get here
+            else:  # XXX should never get here
                 raise ae
+
         # packaged module
         if '.' in name and isinstance(node, _pytest.python.Module):
             # import ipdb
@@ -175,6 +176,7 @@ def gen_nodes(item, cache):
                 path += (level,)
                 yield path, Package(name, lpath, node, node.parent)
             name = prefix[-1]  # this mod's name
+
         # func item
         elif isinstance(node, _pytest.python.Function):
             name = node.name
@@ -189,6 +191,8 @@ def gen_nodes(item, cache):
                     pf = ParametrizedFunc(name, node, node.parent)
                 path += (funcname,)
                 yield path, pf
+
+        # all other nodes
         path += (name,)
         yield path, node
 
@@ -201,7 +205,7 @@ class Selection(object):
     def append(self, item):
         self.funcitems[item.nodeid] = item
 
-    def extend(self, test_set):
+    def addtests(self, test_set):
         for item in test_set._items:
             self.append(item)
 
@@ -225,12 +229,18 @@ class Selection(object):
         return self.funcitems[key]
 
     def __dir__(self):
-        attrs = sorted(set(dir(type(self)) +
-                       list(self.__dict__.keys())))
+        attrs = dirinfo(self)
         return self.funcitems.keys() + attrs
 
     def items(self):
-        return [(i, node.nodeid) for i, node in enumerate(self.funcitems.values())]
+        return [(i, node.nodeid) for i, node in enumerate(
+            self.funcitems.values())]
+
+
+def dirinfo(obj):
+    """return relevant __dir__ info for obj
+    """
+    return sorted(set(dir(type(obj)) + list(obj.__dict__.keys())))
 
 
 class TestTree(object):
@@ -273,21 +283,16 @@ class TestTree(object):
                 raise ae
 
     def __dir__(self, key=None):
-        attrs = sorted(set(dir(type(self)) + list(self.__dict__.keys())))
-        attrs.extend(sorted(set(dir(type(self._root)) + list(self._root.__dict__.keys()))))
+        attrs = dirinfo(self)
+        attrs.extend(dirinfo(self._root))
         return dir(self._root) + attrs
 
     def __repr__(self):
         return repr(self._root)
 
     def _runall(self, path=None):
-        # XXX can this selection remain ordered to avoid
-        # traversing the list again?...imagined speed gain in my head?
-        if path:
-            # items = self._path2items[path]
-            for item in self._path2items[path]:
-                self.selection[item.nodeid] = item
-            # self.selection.extend([f for f in self._funcitems if f in items])
+        """Run all currently selected tests
+        """
         self._shell.exit()
 
 
@@ -339,13 +344,11 @@ class TestSet(object):
         return self._sub(key)
 
     def __call__(self, key=None):
-        """Run all tests under this node"""
-        if key is None:
-            path = self._path
-        else:
-            path = None
-            self[key]  # select tests specified by key
-        return self._tree._runall(path)
+        """Select and run all tests under this node
+        plus any already selected previously
+        """
+        self._tree.selection.addtests(self)
+        return self._tree._runall()
 
     def __getattr__(self, attr):
         try:
