@@ -3,69 +3,6 @@ import pytest
 import pprint
 import operator
 from collections import OrderedDict, namedtuple
-from IPython.terminal.embed import InteractiveShellEmbed
-from IPython.core.magic import (Magics, magics_class, line_magic)
-
-
-class PytestShellEmbed(InteractiveShellEmbed):
-
-    def exit(self):
-        """Handle interactive exit.
-        This method calls the ask_exit callback.
-        """
-        if getattr(self, 'test_items', None):
-            print(" \n".join(self.test_items.keys()))
-            msg = "You have selected the above {} test(s) to be run."\
-                  "\nWould you like to run pytest now? ([y]/n)?"\
-                  .format(len(self.test_items))
-        else:
-            msg = 'Do you really want to exit ([y]/n)?'
-        if self.ask_yes_no(msg, 'y'):
-            self.ask_exit()
-
-
-@magics_class
-class SelectionMagics(Magics):
-
-    def _ns_lookup(self, line):
-        '''Look up an object in the embedded ns
-        and return it
-        '''
-        ns = self.shell.user_ns
-        try:
-            return eval(line, ns)
-        except NameError:
-            # FIXME: do we even need this?
-            root, sep, tail = line.partition('.')
-            obj = ns[root]
-            if tail:
-                obj = operator.attrgetter(tail)(obj)
-            return obj
-
-    @property
-    def selection(self):
-        return self._ns_lookup('tt.selection')
-
-    @line_magic
-    def add(self, line):
-        'add tests to the current selection'
-        ts = self._ns_lookup(line)
-        self.selection.addtests(ts)
-
-    @line_magic
-    def remove(self, line):
-        'remove tests from the current selection'
-        if ':' in line:
-            return line
-        else:
-            self.selection.clear()
-        # getter = operator.itemgetter(self.selection, line)
-        # self.selection.remove(self._ns_lookup(line))
-
-    @line_magic
-    def show(self, line):
-        '''show all currently selected test'''
-        return self.selection.items()
 
 
 def pytest_addoption(parser):
@@ -76,17 +13,25 @@ def pytest_addoption(parser):
 
 
 def pytest_keyboard_interrupt(excinfo):
-    'enter the debugger on keyboard interrupt'
+    """enter the debugger on keyboard interrupt
+    """
     pytest.set_trace()
 
 
 def pytest_collection_modifyitems(session, config, items):
-    """
-    called after collection has been performed, may filter or re-order
+    """called after collection has been performed, may filter or re-order
     the items in-place.
     """
     if not (config.option.interactive and items):
         return
+    if config.option.capture != 'no':
+        # TODO: message on failure - use terminal reporter from
+        # pytest.terminal.py
+        # config.tr.
+        items[:] = []
+        return
+    else:
+        from shell import PytestShellEmbed, SelectionMagics
 
     # prep and embed ipython
     ipshell = PytestShellEmbed(banner1='Entering IPython workspace...',
@@ -112,8 +57,8 @@ pytest invoke all tests selected under that node."""
     ipshell(msg, local_ns={'tt': tt, 'ipshell': ipshell})
 
     # make selection
-    if tt.selection:
-        items[:] = list(tt.selection.values())[:]
+    if tt._selection:
+        items[:] = list(tt._selection.values())[:]
     else:
         items[:] = []
 
@@ -163,8 +108,6 @@ def gen_nodes(item, cache):
 
         # packaged module
         if '.' in name and isinstance(node, _pytest.python.Module):
-            # import ipdb
-            # ipdb.set_trace()
             # FIXME: this should be cwd dependent!!!
             # (i.e. don't add package objects we're below in the fs)
             prefix = tuple(name.split('.'))
@@ -246,7 +189,7 @@ def dirinfo(obj):
 class TestTree(object):
     def __init__(self, funcitems, ipshell):
         self._funcitems = funcitems  # never modify this
-        self.selection = Selection()  # items must be unique
+        self._selection = Selection()  # items must be unique
         self._path2items = OrderedDict()
         self._path2children = {}  # defaultdict(set)
         self._sp2items = {}  # selection property to items
@@ -254,7 +197,7 @@ class TestTree(object):
         self._cache = {}
         for item in funcitems:
             for path, node in gen_nodes(item, self._nodes):
-                self._path2items.setdefault(path, list()).append(item)
+                self._path2items.setdefault(path, []).append(item)
                 # self._sp2items
                 if path not in self._nodes:
                     self._nodes[path] = node
@@ -263,11 +206,11 @@ class TestTree(object):
 
         # ipython shell
         self._shell = ipshell
-        self._shell.test_items = self.selection
+        self._shell.test_items = self._selection
 
     def __str__(self):
         '''stringify current selection length'''
-        return str(len(self.selection))
+        return str(len(self._selection))
 
     # def _get_children(self, path):
     #     'return all children for the node given by path'
@@ -347,7 +290,7 @@ class TestSet(object):
         """Select and run all tests under this node
         plus any already selected previously
         """
-        self._tree.selection.addtests(self)
+        self._tree._selection.addtests(self)
         return self._tree._runall()
 
     def __getattr__(self, attr):
