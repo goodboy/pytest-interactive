@@ -1,6 +1,5 @@
 # test set for inheritance bug
 import pytest
-import ipdb
 
 # thanks to:
 # http://stackoverflow.com/questions/11281698/python-dynamic-class-methods

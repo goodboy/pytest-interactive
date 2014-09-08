@@ -1,6 +1,5 @@
 # test set for plugin testing
 # from IPython import embed
-import ipdb
 import pytest
 
 class Dut(object):

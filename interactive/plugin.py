@@ -54,7 +54,12 @@ Please explore the test (collection) tree using tt.<TAB>\n
 When finshed tabbing to a test node, simply call it to have
 pytest invoke all tests selected under that node."""
 
-    ipshell(msg, local_ns={'tt': tt, 'ipshell': ipshell})
+    ipshell(msg, local_ns={
+        'tt': tt,
+        'shell': shell,
+        'config': config,
+        'session': session,
+        })
 
     # make selection
     if tt._selection:
