@@ -263,7 +263,7 @@ class TestTree(object):
             tr = self._tr
         stack = []
         indent = ""
-        ncols = math.ceil(math.log10(len(items)))
+        ncols = int(math.ceil(math.log10(len(items))))
         # tr.write_line('')  # one blank line to start
         for i, item in enumerate(items):
             needed_collectors = item.listchain()[1:]  # strip root node
@@ -282,8 +282,6 @@ class TestTree(object):
                 else:
                     index = ''
                 indent = indent[:-len(index) or None] + (ncols+1) * " "
-                # tr.write_line("{}{}{}".format(
-                #     index, indent, col))
                 tr.write("{}".format(index), green=True)
                 tr.write_line("{}{}".format(indent, col))
 
