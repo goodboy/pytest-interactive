@@ -15,7 +15,21 @@ def pytest_addoption(parser):
 def pytest_keyboard_interrupt(excinfo):
     """enter the debugger on keyboard interrupt
     """
+    if config.option.capture != 'no':
+        return
     pytest.set_trace()
+
+
+@pytest.mark.trylast
+def pytest_configure(config):
+    """called after command line options have been parsed
+    and all plugins and initial conftest files been loaded.
+    """
+    if config.option.capture != 'no':
+        tr = config.pluginmanager.getplugin('terminalreporter')
+        tr.write('ERROR: ', red=True)
+        tr.write_line("you must specify the -s option to use the interactive plugin")
+        pytest.exit(1)
 
 
 def pytest_collection_modifyitems(session, config, items):
@@ -24,18 +38,12 @@ def pytest_collection_modifyitems(session, config, items):
     """
     if not (config.option.interactive and items):
         return
-    if config.option.capture != 'no':
-        # TODO: message on failure - use terminal reporter from
-        # pytest.terminal.py
-        # config.tr.
-        items[:] = []
-        return
     else:
         from shell import PytestShellEmbed, SelectionMagics
 
     # prep and embed ipython
-    ipshell = PytestShellEmbed(banner1='Entering IPython workspace...',
-                               exit_msg='Exiting IPython...Running pytest')
+    ipshell = PytestShellEmbed(banner1='entering ipython workspace...',
+                               exit_msg='exiting shell...')
     ipshell.register_magics(SelectionMagics)
     # build a tree of test items
     tt = TestTree(items, ipshell)
@@ -56,7 +64,7 @@ pytest invoke all tests selected under that node."""
 
     ipshell(msg, local_ns={
         'tt': tt,
-        'shell': shell,
+        'shell': ipshell,
         'config': config,
         'session': session,
         })
@@ -339,6 +347,8 @@ class TestSet(object):
             path = self._path
             ind = key
             ckey = (path, str(key))
+
+        # return a new set of tests corresponding to 'key'
         return self._tree._cache.setdefault(
             ckey, type(self)(
                 self._tree, path, indices=ind)
