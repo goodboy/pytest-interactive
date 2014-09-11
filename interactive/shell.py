@@ -22,40 +22,36 @@ class PytestShellEmbed(InteractiveShellEmbed):
 @magics_class
 class SelectionMagics(Magics):
 
-    def _ns_lookup(self, line):
-        '''Look up an object in the embedded ns
-        and return it
+    def ns_eval(self, line):
+        '''Evalutate line in the embedded ns and return it
         '''
         ns = self.shell.user_ns
-        try:
-            return eval(line, ns)
-        except NameError:
-            # FIXME: do we even need this?
-            root, sep, tail = line.partition('.')
-            obj = ns[root]
-            if tail:
-                obj = operator.attrgetter(tail)(obj)
-            return obj
+        return eval(line, ns)
 
     @property
     def selection(self):
-        return self._ns_lookup('tt._selection')
+        return self.ns_eval('tt._selection')
 
     @line_magic
     def add(self, line):
-        'add tests to the current selection'
-        ts = self._ns_lookup(line)
-        self.selection.addtests(ts)
+        '''add tests to the current selection
+        '''
+        ts = self.ns_eval(line)
+        if ts:
+            self.selection.addtests(ts)
+        else:
+            raise TypeError("'{}' is not a test set".format(ts))
 
     @line_magic
     def remove(self, line):
-        'remove tests from the current selection'
+        '''remove tests from the current selection
+        '''
         if ':' in line:
             return line
         else:
             self.selection.clear()
         # getter = operator.itemgetter(self.selection, line)
-        # self.selection.remove(self._ns_lookup(line))
+        # self.selection.remove(self.ns_eval(line))
 
     @line_magic
     def show(self, line):
