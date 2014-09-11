@@ -23,6 +23,7 @@ features:
 - pytest session time shouldn't include ipython time??
 
 
+DONE - pretty printer for %show magic
 DONE - move ipshell stuff to separate module and only load when config.capture != 'no'
 DONE - show item selection in the ipython prompt
 DONE - allow for index/slice selection of any test subset

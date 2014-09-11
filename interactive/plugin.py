@@ -1,7 +1,7 @@
 import _pytest
 import pytest
+import math
 import pprint
-import operator
 from collections import OrderedDict, namedtuple
 
 
@@ -12,12 +12,12 @@ def pytest_addoption(parser):
                      " collection")
 
 
-def pytest_keyboard_interrupt(excinfo):
-    """enter the debugger on keyboard interrupt
-    """
-    if config.option.capture != 'no':
-        return
-    pytest.set_trace()
+# def pytest_keyboard_interrupt(excinfo):
+#     """enter the debugger on keyboard interrupt
+#     """
+#     if config.option.capture != 'no':
+#         return
+#     pytest.set_trace()
 
 
 @pytest.mark.trylast
@@ -28,7 +28,8 @@ def pytest_configure(config):
     if config.option.capture != 'no':
         tr = config.pluginmanager.getplugin('terminalreporter')
         tr.write('ERROR: ', red=True)
-        tr.write_line("you must specify the -s option to use the interactive plugin")
+        tr.write_line("you must specify the -s option to use the interactive"
+                      " plugin")
         pytest.exit(1)
 
 
@@ -39,14 +40,15 @@ def pytest_collection_modifyitems(session, config, items):
     if not (config.option.interactive and items):
         return
     else:
-        from shell import PytestShellEmbed, SelectionMagics
+        from .shell import PytestShellEmbed, SelectionMagics
 
+    tr = config.pluginmanager.getplugin('terminalreporter')
     # prep and embed ipython
     ipshell = PytestShellEmbed(banner1='entering ipython workspace...',
                                exit_msg='exiting shell...')
     ipshell.register_magics(SelectionMagics)
     # build a tree of test items
-    tt = TestTree(items, ipshell)
+    tt = TestTree(items, ipshell, tr)
 
     # FIXME: can we operate on the cls directly and avoid
     # poluting our namespace with items?
@@ -200,7 +202,7 @@ def dirinfo(obj):
 
 
 class TestTree(object):
-    def __init__(self, funcitems, ipshell):
+    def __init__(self, funcitems, ipshell, termrep):
         self._funcitems = funcitems  # never modify this
         self._selection = Selection()  # items must be unique
         self._path2items = OrderedDict()
@@ -220,6 +222,8 @@ class TestTree(object):
         # ipython shell
         self._shell = ipshell
         self._shell.test_items = self._selection
+        # pytest terminal reporter
+        self._tr = termrep
 
     def __str__(self):
         '''stringify current selection length'''
@@ -250,6 +254,38 @@ class TestTree(object):
         """Run all currently selected tests
         """
         self._shell.exit()
+
+    def _tprint(self, items, tr=None):
+        '''extended from
+        pytest.terminal.TerminalReporter._printcollecteditems
+        '''
+        if not tr:
+            tr = self._tr
+        stack = []
+        indent = ""
+        ncols = math.ceil(math.log10(len(items)))
+        # tr.write_line('')  # one blank line to start
+        for i, item in enumerate(items):
+            needed_collectors = item.listchain()[1:]  # strip root node
+            while stack:
+                if stack == needed_collectors[:len(stack)]:
+                    break
+                stack.pop()
+            for col in needed_collectors[len(stack):]:
+                if col.name == "()":
+                    continue
+                stack.append(col)
+                indent = (len(stack) - 1) * "  "
+                # if len(stack) == len(needed_collectors):
+                if col == item:
+                    index = "{}".format(i)
+                else:
+                    index = ''
+                indent = indent[:-len(index) or None] + (ncols+1) * " "
+                # tr.write_line("{}{}{}".format(
+                #     index, indent, col))
+                tr.write("{}".format(index), green=True)
+                tr.write_line("{}{}".format(indent, col))
 
 
 class TestSet(object):
@@ -292,9 +328,8 @@ class TestSet(object):
 
     _items = property(_get_items)
 
-    def items(self):
-        # FIXME: this should return TestSets as values...
-        return [(i, node.nodeid) for i, node in enumerate(self._items)]
+    def _enumitems(self):
+        return [(i, node) for i, node in enumerate(self._items)]
 
     def __getitem__(self, key):
         return self._sub(key)
@@ -317,11 +352,6 @@ class TestSet(object):
             except KeyError:
                 raise AttributeError("sub-node '{}' can not be found"
                                      .format(attr))
-
-    # def show_items(self):
-    #     """Show all test items under this node on the console
-    #     """
-    #     pprint.pprint(self.items())
 
     def _get_node(self, path=None):
         if not path:

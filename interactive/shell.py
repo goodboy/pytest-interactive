@@ -32,6 +32,10 @@ class SelectionMagics(Magics):
     def selection(self):
         return self.ns_eval('tt._selection')
 
+    @property
+    def test_tree(self):
+        return self.ns_eval('tt')
+
     @line_magic
     def add(self, line):
         '''add tests to the current selection
@@ -56,4 +60,12 @@ class SelectionMagics(Magics):
     @line_magic
     def show(self, line):
         '''show all currently selected test'''
-        return self.selection.items()
+        if line:
+            ts = self.ns_eval(line)
+            self.test_tree._tprint(ts._items)
+        else:
+            items = self.selection.values()
+            if items:
+                self.test_tree._tprint(items)
+            else:
+                print("No items selected")
