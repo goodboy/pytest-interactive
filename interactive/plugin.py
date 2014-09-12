@@ -1,7 +1,7 @@
 import _pytest
 import pytest
 import math
-import pprint
+from operator import attrgetter, itemgetter
 from collections import OrderedDict, namedtuple
 
 
@@ -48,6 +48,7 @@ def pytest_collection_modifyitems(session, config, items):
                                exit_msg='exiting shell...')
     ipshell.register_magics(SelectionMagics)
     # build a tree of test items
+    tr.write_line("building test tree...")
     tt = TestTree(items, ipshell, tr)
 
     # FIXME: can we operate on the cls directly and avoid
@@ -59,8 +60,8 @@ def pytest_collection_modifyitems(session, config, items):
     # don't rjustify with preceding 'in' prompt
     pm.justify = False
 
-    msg = """Welcome to pytest-interactive, the pytest + ipython sensation.\n
-Please explore the test (collection) tree using tt.<TAB>\n
+    msg = """Welcome to pytest-interactive, the pytest + ipython sensation.
+Please explore the test (collection) tree using tt.<TAB>
 When finshed tabbing to a test node, simply call it to have
 pytest invoke all tests selected under that node."""
 
@@ -80,26 +81,6 @@ pytest invoke all tests selected under that node."""
 
 _root_id = '.'
 Package = namedtuple('Package', 'name path node parent')
-
-
-class ParametrizedFunc(object):
-    def __init__(self, name, funcitems, parent):
-        self.funcitems = OrderedDict()
-        self.parent = parent
-        if not isinstance(funcitems, list):
-            instances = [funcitems]
-        for item in instances:
-            self.append(item)
-
-    def append(self, item):
-        self.funcitems[item.callspec.id] = item
-
-    def __getitem__(self, key):
-        return self.funcitems[key]
-
-    def __dir__(self):
-        attrs = dirinfo(self)
-        return self.funcitems.keys() + attrs
 
 
 def gen_nodes(item, cache):
@@ -144,9 +125,11 @@ def gen_nodes(item, cache):
                     # TODO: look up the pf based on the vanilla func obj
                     # (should be an attr on the _pyfuncitem...)
                     pf = cache[path + (funcname,)]
-                    pf.append(node)
                 except KeyError:
-                    pf = ParametrizedFunc(name, node, node.parent)
+                    # parametrized func is a collection of funcs
+                    pf = FuncCollection()
+                    pf.parent = node.parent  # set parent like other nodes
+                pf.append(node, 'callspec.id')
                 path += (funcname,)
                 yield path, pf
 
@@ -155,13 +138,19 @@ def gen_nodes(item, cache):
         yield path, node
 
 
-# TODO: could this be unified with ParametrizedFunc ??
-class Selection(object):
-    def __init__(self):
-        self.funcitems = OrderedDict()
+class FuncCollection(object):
+    '''A selection of functions
+    '''
+    def __init__(self, funcitems=None):
+        self.funcs = OrderedDict()
+        if funcitems:
+            if not isinstance(funcitems, list):
+                funcitems = [funcitems]
+            for item in funcitems:
+                self.append(item)
 
-    def append(self, item):
-        self.funcitems[item.nodeid] = item
+    def append(self, item, attr_path='nodeid'):
+        self.funcs[attrgetter(attr_path)(item)] = item
 
     def addtests(self, test_set):
         for item in test_set._items:
@@ -169,30 +158,37 @@ class Selection(object):
 
     def remove(self, test_set):
         for item in test_set._items:
-            self.funcitems.pop(item.nodeid, None)
+            self.funcs.pop(item.nodeid, None)
 
     def clear(self):
-        self.funcitems.clear()
+        self.funcs.clear()
 
     def keys(self):
-        return self.funcitems.keys()
+        return self.funcs.keys()
 
     def values(self):
-        return self.funcitems.values()
+        return self.funcs.values()
 
     def __len__(self):
-        return len(self.funcitems)
+        return len(self.funcs)
 
     def __getitem__(self, key):
-        return self.funcitems[key]
+        if isinstance(key, int):
+            return self.enumitems()[key][1]
+        if isinstance(key, (int, slice)):
+            return list(map(itemgetter(1), self.enumitems()[key]))
+        return self.funcs[key]
 
     def __dir__(self):
-        attrs = dirinfo(self)
-        return self.funcitems.keys() + attrs
+        return list(self.funcs.keys()) + dirinfo(self)
 
     def items(self):
-        return [(i, node.nodeid) for i, node in enumerate(
-            self.funcitems.values())]
+        return self.funcs.items()
+
+    def enumitems(self, items=None):
+        if not items:
+            items = self.funcs.values()
+        return [(i, node) for i, node in enumerate(items)]
 
 
 def dirinfo(obj):
@@ -202,23 +198,26 @@ def dirinfo(obj):
 
 
 class TestTree(object):
+    '''A tree of all collected tests
+    '''
     def __init__(self, funcitems, ipshell, termrep):
         self._funcitems = funcitems  # never modify this
-        self._selection = Selection()  # items must be unique
+        self._selection = FuncCollection()  # items must be unique
         self._path2items = OrderedDict()
-        self._path2children = {}  # defaultdict(set)
-        self._sp2items = {}  # selection property to items
+        self._path2children = {}
+        self._cs2items = {}  # callspec property to items
         self._nodes = {}
         self._cache = {}
         for item in funcitems:
             for path, node in gen_nodes(item, self._nodes):
                 self._path2items.setdefault(path, []).append(item)
-                # self._sp2items
+                # self._cs2items
                 if path not in self._nodes:
                     self._nodes[path] = node
                     self._path2children.setdefault(path[:-1], set()).add(path)
+        # top level test set
         self._root = TestSet(self, (_root_id,))
-
+        self.__class__.__getitem__ = self._root.__getitem__
         # ipython shell
         self._shell = ipshell
         self._shell.test_items = self._selection
@@ -228,10 +227,6 @@ class TestTree(object):
     def __str__(self):
         '''stringify current selection length'''
         return str(len(self._selection))
-
-    # def _get_children(self, path):
-    #     'return all children for the node given by path'
-    #     return self._path2children[path]
 
     def __getattr__(self, key):
         try:
@@ -243,9 +238,7 @@ class TestTree(object):
                 raise ae
 
     def __dir__(self, key=None):
-        attrs = dirinfo(self)
-        attrs.extend(dirinfo(self._root))
-        return dir(self._root) + attrs
+        return dir(self._root) + dirinfo(self) + dirinfo(self._root)
 
     def __repr__(self):
         return repr(self._root)
@@ -264,7 +257,6 @@ class TestTree(object):
         stack = []
         indent = ""
         ncols = int(math.ceil(math.log10(len(items))))
-        # tr.write_line('')  # one blank line to start
         for i, item in enumerate(items):
             needed_collectors = item.listchain()[1:]  # strip root node
             while stack:
@@ -305,8 +297,8 @@ class TestSet(object):
         self._ind = indices
 
     def __dir__(self):
-        if isinstance(self._node, ParametrizedFunc):
-            return self._node._instances.keys()
+        if isinstance(self._node, FuncCollection):
+            return self._node.keys()
         else:
             # return sorted list of child keys
             return sorted([key[self._len] for key in self._children])
@@ -327,7 +319,7 @@ class TestSet(object):
     _items = property(_get_items)
 
     def _enumitems(self):
-        return [(i, node) for i, node in enumerate(self._items)]
+        return self._tree._selection.enumitems(self._items)
 
     def __getitem__(self, key):
         return self._sub(key)
