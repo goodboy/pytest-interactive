@@ -1,6 +1,7 @@
 import _pytest
 import pytest
 import math
+from os import path, makedirs
 from operator import attrgetter, itemgetter
 from collections import OrderedDict, namedtuple
 
@@ -43,13 +44,26 @@ def pytest_collection_modifyitems(session, config, items):
         from .shell import PytestShellEmbed, SelectionMagics
 
     tr = config.pluginmanager.getplugin('terminalreporter')
+    # build a tree of test items
+    tr.write_line("building test tree...")
+    tt = TestTree(items, tr)
+
     # prep and embed ipython
+    fname = 'shell_history.sqlite'
+    confdir = path.join(path.expanduser('~'), '.config', 'pytest_interactive')
+    try:
+        makedirs(confdir)
+    except FileExistsError:
+        pass
+    PytestShellEmbed.pytest_hist_file = path.join(confdir, fname)
     ipshell = PytestShellEmbed(banner1='entering ipython workspace...',
                                exit_msg='exiting shell...')
     ipshell.register_magics(SelectionMagics)
-    # build a tree of test items
-    tr.write_line("building test tree...")
-    tt = TestTree(items, ipshell, tr)
+
+    # test tree needs ref to shell
+    tt._shell = ipshell
+    # shell needs ref to curr selection
+    ipshell.test_items = tt._selection
 
     # FIXME: can we operate on the cls directly and avoid
     # poluting our namespace with items?
@@ -200,7 +214,7 @@ def dirinfo(obj):
 class TestTree(object):
     '''A tree of all collected tests
     '''
-    def __init__(self, funcitems, ipshell, termrep):
+    def __init__(self, funcitems, termrep):
         self._funcitems = funcitems  # never modify this
         self._selection = FuncCollection()  # items must be unique
         self._path2items = OrderedDict()
@@ -218,9 +232,6 @@ class TestTree(object):
         # top level test set
         self._root = TestSet(self, (_root_id,))
         self.__class__.__getitem__ = self._root.__getitem__
-        # ipython shell
-        self._shell = ipshell
-        self._shell.test_items = self._selection
         # pytest terminal reporter
         self._tr = termrep
 
@@ -268,7 +279,6 @@ class TestTree(object):
                     continue
                 stack.append(col)
                 indent = (len(stack) - 1) * "  "
-                # if len(stack) == len(needed_collectors):
                 if col == item:
                     index = "{}".format(i)
                 else:

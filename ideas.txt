@@ -2,7 +2,6 @@ outstandings:
 - select subsets of a parametrized test instances
   -> organize by fixture, parametrize call?
   -> can be found under the items callspec attr
-- history from this shell saved for exclusive re-use
 
 
 features:
@@ -23,6 +22,7 @@ features:
 - pytest session time shouldn't include ipython time??
 
 
+DONE - history from this shell saved for exclusive re-use
 DONE - pretty printer for %show magic
 DONE - move ipshell stuff to separate module and only load when config.capture != 'no'
 DONE - show item selection in the ipython prompt

@@ -1,8 +1,15 @@
 from IPython.terminal.embed import InteractiveShellEmbed
 from IPython.core.magic import (Magics, magics_class, line_magic)
+from IPython.core.history import HistoryManager
 
 
 class PytestShellEmbed(InteractiveShellEmbed):
+
+    def init_history(self):
+        """Sets up the command history, and starts regular autosaves."""
+        self.history_manager = HistoryManager(
+            shell=self, parent=self, hist_file=self.pytest_hist_file)
+        self.configurables.append(self.history_manager)
 
     def exit(self):
         """Handle interactive exit.
