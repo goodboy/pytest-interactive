@@ -1,6 +1,7 @@
 import _pytest
 import pytest
 import math
+import errno
 from os import path, makedirs
 from operator import attrgetter, itemgetter
 from collections import OrderedDict, namedtuple
@@ -53,8 +54,13 @@ def pytest_collection_modifyitems(session, config, items):
     confdir = path.join(path.expanduser('~'), '.config', 'pytest_interactive')
     try:
         makedirs(confdir)
-    except FileExistsError:
-        pass
+    # except FileExistsError:
+    #     pass
+    except OSError as e:  # py2 compat
+        if e.errno == errno.EEXIST:
+            pass
+        else:
+            raise
     PytestShellEmbed.pytest_hist_file = path.join(confdir, fname)
     ipshell = PytestShellEmbed(banner1='entering ipython workspace...',
                                exit_msg='exiting shell...')
