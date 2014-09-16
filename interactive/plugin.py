@@ -27,7 +27,8 @@ def pytest_configure(config):
     """called after command line options have been parsed
     and all plugins and initial conftest files been loaded.
     """
-    if config.option.capture != 'no':
+    option = config.option
+    if option.capture != 'no' and option.interactive:
         tr = config.pluginmanager.getplugin('terminalreporter')
         tr.write('ERROR: ', red=True)
         tr.write_line("you must specify the -s option to use the interactive"
