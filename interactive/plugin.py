@@ -2,6 +2,7 @@ import _pytest
 import pytest
 import math
 import errno
+import sys
 import os
 from os.path import expanduser, join
 from operator import attrgetter, itemgetter
@@ -171,7 +172,8 @@ def tosymbol(ident):
     in the provided string identifier
     """
     ident = str(ident)
-    for char in (" ", "-", "/"):
+    for char in (" ", "-", "/", "{", "}", ":", ".", "<", ">", ",", "(", ")",
+                 "=", "'"):
         ident = ident.replace(char, "_")
     if ident[0].isdigit():
         raise TypeError("Can't convert int")
@@ -262,11 +264,12 @@ class TestTree(object):
     def __getattr__(self, key):
         try:
             object.__getattribute__(self, key)
-        except AttributeError as ae:
+        except AttributeError:
             try:
                 return getattr(self._root, key)
-            except AttributeError:
+            except AttributeError as ae:
                 raise ae
+                # raise AttributeError, (ae, sys.exc_info()[2])
 
     def __dir__(self, key=None):
         return dir(self._root) + dirinfo(self) + dirinfo(self._root)
@@ -420,8 +423,10 @@ class TestSet(object):
             except TypeError:
                 raise ae
             except KeyError:
-                raise AttributeError("sub-node '{}' can not be found"
-                                     .format(attr))
+                raise AttributeError#(
+                    # "sub-node '{}' can not be found".format(attr),
+                    # sys.exc_info()[2]
+                # )
 
     def _get_node(self, path=None):
         if not path:
@@ -443,6 +448,7 @@ class TestSet(object):
             elif key is 'parent':
                 path = self._path[:-1]
             else:
+                # key is a subchild name
                 path = self._path + (key,)
             # ensure sub-node with name exists
             self._get_node(path)
