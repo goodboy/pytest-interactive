@@ -321,10 +321,13 @@ class TestSet(object):
             return sorted([key[self._len] for key in self._children])
 
     def __repr__(self):
-        clsname = self._node.__class__.__name__
+
+        clsname = self.__class__.__name__
         nodename = getattr(self._node, 'name', None)
-        return "<{} '{}' -> {} tests>".format(str(clsname), nodename,
+        ident = "<{} for '{}' -> {} tests>".format(str(clsname), nodename,
                                               len(self._items))
+        self._tree._tr.write_line(ident)
+        self._tree._tprint(self._items)
 
     @property
     def _children(self):

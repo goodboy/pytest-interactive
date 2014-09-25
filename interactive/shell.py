@@ -90,13 +90,9 @@ class SelectionMagics(Magics):
 
             show <test_set>:  print all tests in test_set
         '''
-        if test_set:
-            ts = self.ns_eval(test_set)
-            self.tt._tprint(ts._items)
+        items = self.selection.values()
+        if items:
+            self.tt._tprint(items)
         else:
-            items = self.selection.values()
-            if items:
-                self.tt._tprint(items)
-            else:
-                self.tr.write("error: ", red=True)
-                self.tr.write_line("No tests selected")
+            self.tr.write("ERROR: ", red=True)
+            self.tr.write_line("No tests selected")
