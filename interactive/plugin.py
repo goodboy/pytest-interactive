@@ -156,14 +156,13 @@ def dirinfo(obj):
 
 def tosymbol(ident):
     """Replace illegal python characters with underscores
-    in the provided string identifier
+    in the provided string identifier and return
     """
     ident = str(ident)
     ident = ident.replace(' ', '_')
     ident = re.sub('[^a-zA-Z0-9_]', '_', ident)
     if ident[0].isdigit():
         return ''
-        # raise TypeError("Can't convert int")
     return ident
 
 
@@ -209,7 +208,7 @@ class FuncCollection(object):
         return self.funcs[key]
 
     def __dir__(self):
-        return list(self.funcs.keys()) + dirinfo(self)
+        return dirinfo(self)
 
     def items(self):
         return self.funcs.items()
@@ -229,7 +228,6 @@ class TestTree(object):
         self._path2items = OrderedDict()
         self._item2paths = {}
         self._path2children = {}
-        # self._path2cs = {}  # callspec property to items
         self._nodes = {}
         self._cache = {}
         for item in funcitems:
@@ -240,7 +238,6 @@ class TestTree(object):
                     self._nodes[path] = node
                     # map parent path to set of children paths
                     self._path2children.setdefault(path[:-1], set()).add(path)
-        # top level test set
         self._root = TestSet(self, (_root_id,))
         self.__class__.__getitem__ = self._root.__getitem__
         # pytest terminal reporter
@@ -254,11 +251,7 @@ class TestTree(object):
         try:
             object.__getattribute__(self, key)
         except AttributeError:
-            # try:
             return getattr(self._root, key)
-            # except AttributeError as ae:
-            #     raise ae
-                # raise AttributeError, (ae, sys.exc_info()[2])
 
     def __dir__(self, key=None):
         return dir(self._root) + dirinfo(self) + dirinfo(self._root)
@@ -267,7 +260,7 @@ class TestTree(object):
         return repr(self._root)
 
     def _runall(self, path=None):
-        """Run all currently selected tests
+        """run selected tests once shell exits
         """
         self._shell.exit()
 
@@ -307,7 +300,8 @@ class TestTree(object):
 def item2params(item):
     cs = getattr(item, 'callspec', None)
     if cs:
-        return map(tosymbol, cs.params.values())
+        # return map(tosymbol, cs.params.values())
+        return map(tosymbol, cs.id.split('-'))
     else:
         return []
 
@@ -345,7 +339,6 @@ class TestSet(object):
         self._ind = indices
         self._params = params
         self._paramf = by_name(params)
-        # self._params = self._get_params()
 
     def __repr__(self):
         """Pretty print the current set to console
@@ -359,14 +352,14 @@ class TestSet(object):
         return ident
 
     def __dir__(self):
-        # childkeys = self._childkeys
-        # childkeys.extend(self._params)
+        if isinstance(self._node, FuncCollection):
+            return dir(self.params)
         return self._childkeys
 
     @property
     def _childkeys(self):
         '''sorted list of child keys'''
-        return sorted([key[self._len] for key in self._children])
+        return sorted([key[self._len] for key in self._iterchildren()])
 
     @property
     def params(self):
@@ -380,63 +373,19 @@ class TestSet(object):
             ns.update({ident: _new(ident) for ident in item2params(item)
                       if ident not in self._params})
         return type('Params', (), ns)()
-    # def _get_params(self):
-    #     keys = []
-    #     for item in self._items:
-    #         cs = getattr(item, 'callspec', ())
-    #         if cs:
-    #             # gather parameterized values
-    #             for val in cs.params.values():
-    #                 try:
-    #                     ident = tosymbol(val)
-    #                 except TypeError:
-    #                     continue
-    #                 else:
-    #                     keys.append(ident)
-    #     return [key for key in keys if key not in self._csparams]
-
-    @property
-    def _children(self):
-        return [path for path in self._iterchildren()]
 
     def _iterchildren(self):
-        # childpaths = self._tree._path2children[self._path]
         # if we have callspec ids in our getattr chain,
-        # we need to filter out any children who's items
-        # are not included in our set
-        # paths = []
+        # filter out any children who's items are not in our set
         for path in self._tree._path2children[self._path]:
             # check intersection of our items with child items
             if set(self._tree._path2items[path]) & set(self._items):
-                # paths.append(path)
                 yield path
-        # return paths
-        # for item in self._items:
-        #     for path in self._tree._item2paths[item]:
-        #         if path in self._tree._path2children.values():
-        #             yield path
-        # if not self._csparams:
-        # return child_paths
-        # else:
 
     @property
     def _items(self):
         return [item for item in filter(self._paramf,
                 self._tree._path2items[self._path])][self._ind]
-        # if not self._csparams:
-        #     return funcitems
-        # else:
-        #     items = []
-        #     for item in funcitems:
-        #         try:
-        #             cs = getattr(item, 'callspec')
-        #         except AttributeError:
-        #             continue
-        #         else:
-        #             for val in cs.params.values():
-        #                 if val in self._csparams:
-        #                     items.append(item)
-        #     return items
 
     def _enumitems(self):
         return self._tree._selection.enumitems(self._items)
@@ -444,40 +393,22 @@ class TestSet(object):
     def __getitem__(self, key):
         '''Return a new subset/node
         '''
-        # ind = None
-        # cs = ()
         if isinstance(key, str):
-            # if key in self._params:
-            #     # callspec param values/idents
-            #     cs += (key,)
-            #     path = self._path
-            # elif key is 'parent':
             if key is 'parent':
                 return self._new(path=self._path[:-1])
-                # path = self._path[:-1]
-            # elif key in self._childkeys:
-            elif key in self._childkeys:
-                # key is a subchild name
+            elif key in self._childkeys:  # key is a subchild name
                 return self._new(path=self._path + (key,))
             else:
+                if key in dir(self.params):
+                    return self._new(params=self._params + (key,))
                 raise KeyError(key)
-                # path = self._path + (key,)
-                # ensure sub-node exists
-                # self._get_node(path)
         elif isinstance(key, (int, slice)):
             return self._new(indices=key)
-            # path = self._path
-            # ind = key
-        # return a new test set corresponding to 'key'
-        # ckey = (path, str(key))
-        # return self._tree._cache.setdefault(
-        #     ckey, self._new(path=path, indices=ind)
-            # type(self)(
-            #     self._tree, path, indices=ind, params=self._params, #cs_params=self._csparams + cs
-            # )
-        # )
 
     def _new(self, tree=None, path=None, indices=None, params=None):
+        # do caching?
+        # return self._tree._cache.setdefault(
+        #     ckey, self._new(path=path, indices=ind)
         return type(self)(
             tree or self._tree,
             path or self._path,
