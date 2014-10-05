@@ -2,10 +2,8 @@ import _pytest
 import pytest
 import math
 import errno
-import sys
 import re
 import os
-import itertools
 from os.path import expanduser, join
 from operator import attrgetter, itemgetter
 from collections import OrderedDict, namedtuple
@@ -82,7 +80,7 @@ pytest invoke all tests selected under that node."""
         'config': config,
         'session': session,
         })
-    # make the final selection
+    # make final selection
     if tt._selection:
         items[:] = list(tt._selection.values())[:]
     else:
@@ -96,7 +94,7 @@ Package = namedtuple('Package', 'name path node parent')
 def gen_nodes(item, cache):
     '''generate all parent objs of this node up to the root/session'''
     path = ()
-    # pytest call which lists path items in order
+    # pytest node api - lists path items in order
     chain = item.listchain()
     for node in chain:
         try:
@@ -299,11 +297,8 @@ class TestTree(object):
 
 def item2params(item):
     cs = getattr(item, 'callspec', None)
-    if cs:
-        # return map(tosymbol, cs.params.values())
-        return map(tosymbol, cs.id.split('-'))
-    else:
-        return []
+    # return map(tosymbol, cs.params.values())
+    return tuple(map(tosymbol, cs.id.split('-'))) if cs else ()
 
 
 def by_name(idents):
@@ -311,9 +306,9 @@ def by_name(idents):
         def predicate(item):
             params = item2params(item)
             for ident in idents:
-                if ident in params:
-                    return True
-            return False
+                if ident not in params:
+                    return False
+            return True
         return predicate
     else:
         return lambda item: True
@@ -334,7 +329,7 @@ class TestSet(object):
             indices = slice(indices)
         elif isinstance(indices, int):
             # create a slice which will slice out a single element
-            # (the or expr is here for the indices = -1 case)
+            # (the 'or' expr is here for the 'indices = -1' case)
             indices = slice(indices, indices + 1 or None)
         self._ind = indices
         self._params = params
@@ -372,18 +367,20 @@ class TestSet(object):
         for item in self._items:
             ns.update({ident: _new(ident) for ident in item2params(item)
                       if ident not in self._params})
-        return type('Params', (), ns)()
+        return type('CallspecParameters', (), ns)()
 
     def _iterchildren(self):
         # if we have callspec ids in our getattr chain,
         # filter out any children who's items are not in our set
+        # by checking the intersection of our items with child items
         for path in self._tree._path2children[self._path]:
-            # check intersection of our items with child items
             if set(self._tree._path2items[path]) & set(self._items):
                 yield path
 
     @property
     def _items(self):
+        # XXX might it be possible here to do something more efficient
+        # with a bool selector + itertools.compress??
         return [item for item in filter(self._paramf,
                 self._tree._path2items[self._path])][self._ind]
 
@@ -424,10 +421,9 @@ class TestSet(object):
             except KeyError as ke:
                 raise AttributeError(ke)
 
-    def _get_node(self, path=None):
+    @property
+    def _node(self, path=None):
         return self._tree._nodes[path or self._path]
-
-    _node = property(_get_node)
 
     def __call__(self, key=None):
         """Select and run all tests under this node
