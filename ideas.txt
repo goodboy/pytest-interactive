@@ -1,7 +1,7 @@
 outstandings:
-- select subsets of a parametrized test instances
-  -> organize by fixture, parametrize call?
-  -> can be found under the items callspec attr
+- don't require a -s so output can still be supressed
+- overall usage docs
+- magics docs
 
 
 features:
@@ -22,8 +22,9 @@ features:
 - pytest session time shouldn't include ipython time??
 
 
+DONE - select subsets of a parametrized test instances by callspec id
 DONE - history from this shell saved for exclusive re-use
-DONE - pretty printer for %show magic
+DONE - pretty printer for default __repr__
 DONE - move ipshell stuff to separate module and only load when config.capture != 'no'
 DONE - show item selection in the ipython prompt
 DONE - allow for index/slice selection of any test subset
