@@ -53,7 +53,7 @@ class SelectionMagics(Magics):
 
     @line_magic
     def add(self, line):
-        '''Add tests to the current selection from a test set.
+        '''Add tests from a test set to the current selection.
 
         Usage:
 
@@ -77,6 +77,7 @@ class SelectionMagics(Magics):
 
         Usage:
 
+        remove : remove all tests from the current selection
         remove -1 : remove the last item from the selection
         remove 1, : remove all but the first item (same as [1:])
         remove ,,-3 : remove every third item (same as [::-3])
@@ -87,6 +88,7 @@ class SelectionMagics(Magics):
             return
         if not line:
             selection.clear()
+            return
         # parse out slice
         if delim in line:
             slc = slice(*map(lambda x: int(x.strip()) if x.strip() else None,
