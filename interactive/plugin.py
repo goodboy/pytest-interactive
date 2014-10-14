@@ -331,7 +331,7 @@ class TestSet(object):
             # create a slice which will slice out a single element
             # (the 'or' expr is here for the 'indices = -1' case)
             indices = slice(indices, indices + 1 or None)
-        self._ind = indices
+        self._ind = indices  # might be a slice
         self._params = params
         self._paramf = by_name(params)
 
@@ -409,7 +409,7 @@ class TestSet(object):
         return type(self)(
             tree or self._tree,
             path or self._path,
-            indices or self._ind,
+            indices if indices is not None else self._ind,
             params or self._params)
 
     def __getattr__(self, attr):
