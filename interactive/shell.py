@@ -15,11 +15,11 @@ class PytestShellEmbed(InteractiveShellEmbed):
         """Handle interactive exit.
         This method calls the ask_exit callback.
         """
-        if getattr(self, 'test_items', None):
-            print(" \n".join(self.test_items.keys()))
+        if getattr(self, 'selection', None):
+            print(" \n".join(self.selection.keys()))
             msg = "You have selected the above {} test(s) to be run."\
                   "\nWould you like to run pytest now? ([y]/n)?"\
-                  .format(len(self.test_items))
+                  .format(len(self.selection))
         else:
             msg = 'Do you really want to exit ([y]/n)?'
         if self.ask_yes_no(msg, 'y'):
@@ -47,9 +47,19 @@ class SelectionMagics(Magics):
     def tr(self):
         return self.tt._tr
 
+    def err(self, msg="No tests selected"):
+        self.tr.write("ERROR: ", red=True)
+        self.tr.write_line(msg)
+
     @line_magic
     def add(self, line):
-        '''add tests to the current selection
+        '''Add tests to the current selection from a test set.
+
+        Usage:
+
+        add tt : add all tests in the current tree
+        add tt[4] : add 5th test in the current tree
+        add tt.tests[1:10] : add tests 1-9 found under the 'tests' module
         '''
         if line:
             ts = self.ns_eval(line)
@@ -61,38 +71,45 @@ class SelectionMagics(Magics):
             print("No test set provided?")
 
     @line_magic
-    def remove(self, line):
-        '''remove tests from the current selection
-        '''
-        if self.selection:
-            if ':' in line:
-                return line
-            else:
-                    self.selection.clear()
-        else:
-            print("No tests currently selected?")
+    def remove(self, line, delim=','):
+        """Remove tests from the current selection using a slice syntax
+        using a ',' delimiter instead of ':'.
 
-        # getter = operator.itemgetter(self.selection, line)
-        # self.selection.remove(self.ns_eval(line))
+        Usage:
+
+        remove -1 : remove the last item from the selection
+        remove 1, : remove all but the first item (same as [1:])
+        remove ,,-3 : remove every third item (same as [::-3])
+        """
+        selection = self.selection
+        if not self.selection:
+            self.err()
+            return
+        if not line:
+            selection.clear()
+        # parse out slice
+        if delim in line:
+            slc = slice(*map(lambda x: int(x.strip()) if x.strip() else None,
+                        line.split(delim)))
+            for item in selection[slc]:
+                selection.remove(item)
+        else:
+            try:
+                selection.remove(selection[int(line)])
+            except ValueError:
+                self.err("'{}' is not and index or slice?".format(line))
 
     @line_magic
     def show(self, test_set):
         '''Show all currently selected test by pretty printing
         to the console.
 
-        With no arguments this command is will display the currentlly selected
-        set of tests. With a test set as an argument it will display all tests
-        in the set.
-
         Usage:
 
             show:  print currently selected tests
-
-            show <test_set>:  print all tests in test_set
         '''
         items = self.selection.values()
         if items:
             self.tt._tprint(items)
         else:
-            self.tr.write("ERROR: ", red=True)
-            self.tr.write_line("No tests selected")
+            self.err()

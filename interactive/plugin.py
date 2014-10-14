@@ -61,7 +61,7 @@ def pytest_collection_modifyitems(session, config, items):
     # test tree needs ref to shell
     tt._shell = ipshell
     # shell needs ref to curr selection
-    ipshell.test_items = tt._selection
+    ipshell.selection = tt._selection
     # set the prompt to track number of selected test items
     pm = ipshell.prompt_manager
     bold_prmpt = '{color.number}' '{tt}' '{color.prompt}'
@@ -176,15 +176,15 @@ class FuncCollection(object):
                 self.append(item)
 
     def append(self, item, attr_path='nodeid'):
-        self.funcs[tosymbol(attrgetter(attr_path)(item))] = item
+        # self.funcs[tosymbol(attrgetter(attr_path)(item))] = item
+        self.funcs[attrgetter(attr_path)(item)] = item
 
     def addtests(self, test_set):
         for item in test_set._items:
             self.append(item)
 
-    def remove(self, test_set):
-        for item in test_set._items:
-            self.funcs.pop(item.nodeid, None)
+    def remove(self, item):
+        self.funcs.pop(item.nodeid, None)
 
     def clear(self):
         self.funcs.clear()
