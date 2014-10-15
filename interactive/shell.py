@@ -17,7 +17,7 @@ class PytestShellEmbed(InteractiveShellEmbed):
         """
         if getattr(self, 'selection', None):
             print(" \n".join(self.selection.keys()))
-            msg = "You have selected the above {} test(s) to be run."\
+            msg = "\nYou have selected the above {} test(s) to be run."\
                   "\nWould you like to run pytest now? ([y]/n)?"\
                   .format(len(self.selection))
         else:

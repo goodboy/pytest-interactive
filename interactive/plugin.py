@@ -430,5 +430,6 @@ class TestSet(object):
         """
         self._tree._selection.addtests(self)
         self._tree._shell.exit()
-        # if user aborts remove all tests
-        self._tree._selection.removetests(self)
+        if not self._tree._shell.exit_now:
+            # if user aborts remove all tests from this set
+            self._tree._selection.removetests(self)
