@@ -186,6 +186,10 @@ class FuncCollection(object):
     def remove(self, item):
         self.funcs.pop(item.nodeid, None)
 
+    def removetests(self, test_set):
+        for item in test_set._items:
+            self.remove(item)
+
     def clear(self):
         self.funcs.clear()
 
@@ -256,11 +260,6 @@ class TestTree(object):
 
     def __repr__(self):
         return repr(self._root)
-
-    def _runall(self, path=None):
-        """run selected tests once shell exits
-        """
-        self._shell.exit()
 
     def _tprint(self, items, tr=None):
         '''extended from
@@ -427,7 +426,9 @@ class TestSet(object):
 
     def __call__(self, key=None):
         """Select and run all tests under this node
-        plus any already selected previously
+        plus any already previously selected once shell exits
         """
         self._tree._selection.addtests(self)
-        return self._tree._runall()
+        self._tree._shell.exit()
+        # if user aborts remove all tests
+        self._tree._selection.removetests(self)
