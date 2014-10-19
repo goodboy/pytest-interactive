@@ -1,4 +1,16 @@
 pytest-interactive
 ==============
 
-Interactively select tests to be run
+Interactively select tests to run using IPython
+
+Installation and usage
+----------------------
+To install
+
+    pip install git+git://github.com/tgoodlet/pytest-interactive.git
+
+To use
+
+  run pytest with `--interavtive` or the shorthand `--ia`
+
+See the docs here: http://pytest-interactive.readthedocs.org/
