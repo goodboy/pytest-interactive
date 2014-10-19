@@ -11,6 +11,6 @@ To install
 
 To use
 
-  run pytest with `--interavtive` or the shorthand `--ia`
+  run pytest with `--interactive` or the shorthand `--ia`
 
 See the docs here: http://pytest-interactive.readthedocs.org/

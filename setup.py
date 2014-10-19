@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
      name="pytest-interactive",
-     version='0.1.dev1',
+     version='0.1.1',
      description='py.test interactive plugin for test selection just after the collection phase',
      # long_description=open('README.txt').read(),
      license='MIT',
