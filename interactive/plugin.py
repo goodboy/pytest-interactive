@@ -38,13 +38,11 @@ def pytest_collection_modifyitems(session, config, items):
         return
     else:
         from .shell import PytestShellEmbed, SelectionMagics
-
     tr = config.pluginmanager.getplugin('terminalreporter')
     # build a tree of test items
     tr.write_line("building test tree...")
     tt = TestTree(items, tr)
-
-    # prep and embed ipython
+    # prep ipython
     fname = 'shell_history.sqlite'
     confdir = join(expanduser('~'), '.config', 'pytest_interactive')
     try:
@@ -70,9 +68,8 @@ def pytest_collection_modifyitems(session, config, items):
     pm.justify = False
     msg = """Welcome to pytest-interactive, the pytest + ipython sensation.
 Please explore the test (collection) tree using tt.<TAB>
-When finshed tabbing to a test node, simply call it to have
-pytest invoke all tests selected under that node."""
-
+When finished tabbing to a test node, simply call it to have
+pytest invoke all tests collected under that node."""
     # embed
     ipshell(msg, local_ns={
         'tt': tt,
@@ -92,7 +89,8 @@ Package = namedtuple('Package', 'name path node parent')
 
 
 def gen_nodes(item, cache):
-    '''generate all parent objs of this node up to the root/session'''
+    '''generate all parent objs of this node up to the root/session
+    '''
     path = ()
     # pytest node api - lists path items in order
     chain = item.listchain()
@@ -109,7 +107,6 @@ def gen_nodes(item, cache):
                 name = _root_id
             else:  # XXX should never get here
                 raise ae
-
         # packaged module
         if '.' in name and isinstance(node, _pytest.python.Module):
             # FIXME: this should be cwd dependent!!!
@@ -123,7 +120,6 @@ def gen_nodes(item, cache):
                 path += (level,)
                 yield path, Package(name, lpath, node, node.parent)
             name = prefix[-1]  # this mod's name
-
         # func item
         elif isinstance(node, _pytest.python.Function):
             name = node.name
@@ -140,7 +136,6 @@ def gen_nodes(item, cache):
                 pf.append(node)
                 path += (funcname,)
                 yield path, pf
-
         # all other nodes
         path += (name,)
         yield path, node
@@ -246,7 +241,8 @@ class TestTree(object):
         self._tr = termrep
 
     def __str__(self):
-        '''stringify current selection length'''
+        '''stringify current selection length
+        '''
         return str(len(self._selection))
 
     def __getattr__(self, key):
@@ -314,10 +310,9 @@ def by_name(idents):
 
 
 class TestSet(object):
-    '''Represent a pytest node/item tests set.
-    Use as a tab complete-able object in ipython.
-    An internal reference is kept to the pertaining pytest Node.
-    Hierarchical lookups are delegated to the containing TestTree.
+    '''Represent a pytest node/item test set for use as a tab complete-able
+    object in ipython. An internal reference is kept to the pertaining pytest
+    Node and hierarchical lookups are delegated to the containing TestTree.
     '''
     def __init__(self, tree, path, indices=None, params=(),
                  cs_params=()):
@@ -352,7 +347,8 @@ class TestSet(object):
 
     @property
     def _childkeys(self):
-        '''sorted list of child keys'''
+        '''sorted list of child keys
+        '''
         return sorted([key[self._len] for key in self._iterchildren()])
 
     @property
@@ -369,17 +365,16 @@ class TestSet(object):
         return type('CallspecParameters', (), ns)()
 
     def _iterchildren(self):
-        # if we have callspec ids in our getattr chain,
-        # filter out any children who's items are not in our set
-        # by checking the intersection of our items with child items
+        # if we have callspec ids in our getattr chain, filter out any
+        # children who's items are not in our set by checking the
+        # intersection of our items with child items
         for path in self._tree._path2children[self._path]:
             if set(self._tree._path2items[path]) & set(self._items):
                 yield path
 
     @property
     def _items(self):
-        # XXX might it be possible here to do something more efficient
-        # with a bool selector + itertools.compress??
+        # XXX might it be possible here to do something more efficient here?
         return [item for item in filter(self._paramf,
                 self._tree._path2items[self._path])][self._ind]
 
@@ -402,9 +397,7 @@ class TestSet(object):
             return self._new(indices=key)
 
     def _new(self, tree=None, path=None, indices=None, params=None):
-        # do caching?
-        # return self._tree._cache.setdefault(
-        #     ckey, self._new(path=path, indices=ind)
+        # do caching?  return self._tree._cache.setdefault(args*, ...
         return type(self)(
             tree or self._tree,
             path or self._path,
