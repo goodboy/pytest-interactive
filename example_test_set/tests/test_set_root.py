@@ -33,7 +33,7 @@ def mode(request, dut):
     dut.set_mode(orig_mode)
 
 
-@pytest.yield_fixture(params=[1, 2, 3])
+@pytest.yield_fixture(params=['dog', 'cat', 'mouse'])
 def inputs(request):
     yield request.param
 
