@@ -1,19 +1,31 @@
+"""
+An extended shell for test selection
+"""
 from IPython.terminal.embed import InteractiveShellEmbed
 from IPython.core.magic import (Magics, magics_class, line_magic)
 from IPython.core.history import HistoryManager
 
 
 class PytestShellEmbed(InteractiveShellEmbed):
-
+    """Custom ip shell with a slightly altered exit message
+    """
     def init_history(self):
-        """Sets up the command history, and starts regular autosaves."""
+        """Sets up the command history, and starts regular autosaves.
+
+        .. note::
+            A separate history db is allocated for this plugin separate
+            from regular ip shell sessions such that only relevant
+            commands are retained.
+        """
         self.history_manager = HistoryManager(
             shell=self, parent=self, hist_file=self.pytest_hist_file)
         self.configurables.append(self.history_manager)
 
     def exit(self):
         """Handle interactive exit.
-        This method calls the ask_exit callback.
+        This method calls the ask_exit callback and if applicable prompts the
+        user if their current test selection is sufficient before invoking
+        pytest
         """
         if getattr(self, 'selection', None):
             print(" \n".join(self.selection.keys()))
@@ -28,7 +40,9 @@ class PytestShellEmbed(InteractiveShellEmbed):
 
 @magics_class
 class SelectionMagics(Magics):
-
+    """Custom magics for performing multiple test selections
+    within a single session
+    """
     def ns_eval(self, line):
         '''Evalutate line in the embedded ns and return result
         '''
@@ -95,7 +109,7 @@ class SelectionMagics(Magics):
                         line.split(delim)))
             for item in selection[slc]:
                 selection.remove(item)
-        else:
+        else:  # just an index
             try:
                 selection.remove(selection[int(line)])
             except ValueError:
