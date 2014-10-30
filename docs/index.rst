@@ -113,7 +113,7 @@ evaluate it on the shell to trigger a pretty print ``repr`` method:
     14     <Function 'test_m[c-3]'>
     <TestSet for 'example_test_set/tests/subsets/test_setA.py' -> 15 tests>
 
-When ready to run pytest, simply ``__call__`` the current node to exit the shell
+When ready to run pytest, simply :func:`__call__` the current node to exit the shell
 and invoke all tests below it in the tree:
 
 .. code-block:: python
@@ -178,7 +178,7 @@ Or how about the first two
     1   <Function 'test_modes[b]'>
     <TestSet for 'None' -> 2 tests>
 
-You can of course ``__call__`` the indexed node as well to immediately run
+You can of course :func:`__call__` the indexed node as well to immediately run
 all tests in the selection.
 
 
@@ -186,7 +186,7 @@ Filtering by parameterized test callspec ids
 --------------------------------------------
 Tests which are generated at runtime (aka parametrized) can be filtered
 by their callspec ids. Normally the ids are shown inside the
-braces ``[...]`` of the test *nodeid* which often looks someting like:
+braces ``[...]`` of the test *nodeid* which often looks something like:
 
 ``<Function 'test_some_feature[blah-mode5-ipv6]'>``
 
@@ -231,7 +231,7 @@ To access the available ids use the node's
     15     <Function 'test_m[a-3]'>
     <TestSet for 'pytest-interactive' -> 16 tests>
 
-You can continue to filter this way as much as you'd like
+You can continue to filter in this way as much as is possible
 
 .. code-block:: python
 
@@ -307,11 +307,7 @@ When ready to run your tests simply exit the shell
 
 .. code-block:: python
 
-    '1' selected >>> <CTRL-D>
-    example_test_set/tests/subsets/subsubset/test_setB.py::test_modes[b]
-
-    You have selected the above 1 test(s) to be run.
-    Would you like to run pytest now? ([y]/n)?
+    '1' selected >>> exit
 
 For additional docs on the above shell %magics simply use the ``%?`` magic
 syntax available in the IPython shell (i.e. ``add?`` or ``remove?`` or

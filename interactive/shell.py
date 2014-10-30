@@ -23,9 +23,8 @@ class PytestShellEmbed(InteractiveShellEmbed):
 
     def exit(self):
         """Handle interactive exit.
-        This method calls the ask_exit callback and if applicable prompts the
-        user if their current test selection is sufficient before invoking
-        pytest
+        This method calls the ``ask_exit`` callback and if applicable prompts
+        the user to verify the current test selection
         """
         if getattr(self, 'selection', None):
             print(" \n".join(self.selection.keys()))
