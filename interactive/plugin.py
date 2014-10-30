@@ -361,7 +361,7 @@ class TestSet(object):
         ns = {}
         for item in self._items:
             ns.update({ident: _new(ident) for ident in item2params(item)
-                      if ident not in self._params})
+                      if ident and ident not in self._params})
         return type('CallspecParameters', (), ns)()
 
     def _iterchildren(self):
