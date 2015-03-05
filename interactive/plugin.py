@@ -17,20 +17,6 @@ def pytest_addoption(parser):
 
 
 @pytest.mark.trylast
-def pytest_configure(config):
-    """called after command line options have been parsed
-    and all plugins and initial conftest files been loaded.
-    """
-    option = config.option
-    if option.capture != 'no' and option.interactive:
-        tr = config.pluginmanager.getplugin('terminalreporter')
-        tr.write('ERROR: ', red=True)
-        tr.write_line("you must specify the -s option to use the interactive"
-                      " plugin")
-        pytest.exit(1)
-
-
-@pytest.mark.trylast
 def pytest_collection_modifyitems(session, config, items):
     """called after collection has been performed, may filter or re-order
     the items in-place.
@@ -39,6 +25,11 @@ def pytest_collection_modifyitems(session, config, items):
         return
     else:
         from .shell import PytestShellEmbed, SelectionMagics
+
+    capman = config.pluginmanager.getplugin("capturemanager")
+    if capman:
+        capman.suspendcapture(in_=True)
+
     tr = config.pluginmanager.getplugin('terminalreporter')
     # build a tree of test items
     tr.write_line("building test tree...")
