@@ -76,7 +76,8 @@ pytest invoke all tests collected under that node."""
         items[:] = []
 
 
-_root_id = '.'
+_root_ids = ('.', '')
+_root_name = 'session'
 Package = namedtuple('Package', 'name path node parent')
 
 
@@ -95,8 +96,8 @@ def gen_nodes(item, cache):
                 # leave out Instances, later versions are going to drop them
                 # anyway
                 continue
-            elif node.nodeid is _root_id:
-                name = _root_id
+            elif node.nodeid in _root_ids:
+                name = _root_name
             else:  # XXX should never get here
                 raise ae
         # packaged module
@@ -227,7 +228,7 @@ class TestTree(object):
                     self._nodes[path] = node
                     # map parent path to set of children paths
                     self._path2children.setdefault(path[:-1], set()).add(path)
-        self._root = TestSet(self, (_root_id,))
+        self._root = TestSet(self, (_root_name,))
         self.__class__.__getitem__ = self._root.__getitem__
         # pytest terminal reporter
         self._tr = termrep
