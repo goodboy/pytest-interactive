@@ -125,6 +125,7 @@ def gen_nodes(item, cache):
                 except KeyError:
                     # parametrized func is a collection of funcs
                     pf = FuncCollection()
+                    pf.name = funcname
                     pf.parent = node.parent  # set parent like other nodes
                 pf.append(node)
                 path += (funcname,)
@@ -227,7 +228,7 @@ class TestTree(object):
                 if path not in self._nodes:
                     self._nodes[path] = node
                     # map parent path to set of children paths
-                    self._path2children.setdefault(path[:-1], set()).add(path)
+                    self._path2children.setdefault(path[:-1], []).append(path)
         self._root = TestSet(self, (_root_name,))
         self.__class__.__getitem__ = self._root.__getitem__
         # pytest terminal reporter
@@ -307,8 +308,7 @@ class TestSet(object):
     object in ipython. An internal reference is kept to the pertaining pytest
     Node and hierarchical lookups are delegated to the containing TestTree.
     '''
-    def __init__(self, tree, path, indices=None, params=(),
-                 cs_params=()):
+    def __init__(self, tree, path, indices=None, params=()):
         self._tree = tree
         self._path = path
         self._len = len(path)
@@ -346,11 +346,20 @@ class TestSet(object):
 
     @property
     def params(self):
+        """Return a `CallSpecParameters` object who's instance variables are
+        named according to available 'callspec parameters' in child nodes and
+        who's values are `TestSets` corresponding to tests which contain those
+        parameters
+        """
         def _new(ident):
+            """Closure who delivers a func who returns new `TestSets` based on
+            this one but with an extended `_params` according to `ident`
+            """
             @property
             def test_set(pself):
                 return self._new(params=self._params + (ident,))
             return test_set
+
         ns = {}
         for item in self._items:
             ns.update({ident: _new(ident) for ident in item2params(item)
@@ -364,6 +373,10 @@ class TestSet(object):
         for path in self._tree._path2children[self._path]:
             if set(self._tree._path2items[path]) & set(self._items):
                 yield path
+
+    def __iter__(self):
+        for path in self._iterchildren():
+            yield self._new(path=path)
 
     @property
     def _items(self):
@@ -394,7 +407,7 @@ class TestSet(object):
         return type(self)(
             tree or self._tree,
             path or self._path,
-            indices if indices is not None else self._ind,
+            indices,
             params or self._params)
 
     def __getattr__(self, attr):
