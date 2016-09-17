@@ -4,18 +4,34 @@ An extended shell for test selection
 from IPython.terminal.embed import InteractiveShellEmbed
 from IPython.core.magic import (Magics, magics_class, line_magic)
 from IPython.core.history import HistoryManager
+from IPython.terminal.prompts import Prompts, Token
+
+
+class TestCounterPrompt(Prompts):
+    def in_prompt_tokens(self, cli=None):
+        """Render a simple prompt which reports the number of currently
+        selected tests.
+        """
+        return [
+            (Token.PromptNum, '{}'.format(len(self.shell.selection))),
+            (Token.Prompt, ' selected >>> '),
+        ]
 
 
 class PytestShellEmbed(InteractiveShellEmbed):
     """Custom ip shell with a slightly altered exit message
     """
+    prompts_class = TestCounterPrompt
+    # cause if you don't use it shame on you
+    editing_mode = 'vi'
+
     def init_history(self):
         """Sets up the command history, and starts regular autosaves.
 
         .. note::
             A separate history db is allocated for this plugin separate
-            from regular ip shell sessions such that only relevant
-            commands are retained.
+            from regular shell sessions such that only relevant commands
+            are retained.
         """
         self.history_manager = HistoryManager(
             shell=self, parent=self, hist_file=self.pytest_hist_file)
@@ -34,6 +50,7 @@ class PytestShellEmbed(InteractiveShellEmbed):
         else:
             msg = 'Do you really want to exit ([y]/n)?'
         if self.ask_yes_no(msg, 'y'):
+            # sets self.keep_running to False
             self.ask_exit()
 
 

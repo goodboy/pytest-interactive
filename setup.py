@@ -16,7 +16,7 @@ setup(
          'interactive = interactive.plugin'
      ]},
      zip_safe=False,
-     install_requires=['pytest>=2.4.2', 'ipython<5.0'],
+     install_requires=['pytest>=2.4.2', 'ipython>=5.0'],
      classifiers=[
          'Development Status :: 3 - Alpha',
          'Intended Audience :: Developers',

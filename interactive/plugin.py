@@ -23,18 +23,19 @@ def pytest_collection_modifyitems(session, config, items):
     """
     if not (config.option.interactive and items):
         return
-    else:
-        from .shell import PytestShellEmbed, SelectionMagics
 
     capman = config.pluginmanager.getplugin("capturemanager")
     if capman:
         capman.suspendcapture(in_=True)
 
     tr = config.pluginmanager.getplugin('terminalreporter')
+
     # build a tree of test items
-    tr.write_line("building test tree...")
+    tr.write_line("Building test tree...")
     tt = TestTree(items, tr)
-    # prep ipython
+
+    from .shell import PytestShellEmbed, SelectionMagics
+    # prep a separate ipython history file
     fname = 'shell_history.sqlite'
     confdir = join(expanduser('~'), '.config', 'pytest_interactive')
     try:
@@ -44,32 +45,30 @@ def pytest_collection_modifyitems(session, config, items):
             pass
         else:
             raise
+
     PytestShellEmbed.pytest_hist_file = join(confdir, fname)
-    ipshell = PytestShellEmbed(banner1='entering ipython workspace...',
-                               exit_msg='exiting shell...')
+    ipshell = PytestShellEmbed(banner1='Entering IPython shell...')
     ipshell.register_magics(SelectionMagics)
-    # test tree needs ref to shell
-    tt._shell = ipshell
     # shell needs ref to curr selection
     ipshell.selection = tt._selection
-    # set the prompt to track number of selected test items
-    pm = ipshell.prompt_manager
-    bold_prmpt = '{color.number}' '{tt}' '{color.prompt}'
-    pm.in_template = "'{}' selected >>> ".format(bold_prmpt)
-    # don't rjustify with preceding 'in' prompt
-    pm.justify = False
-    msg = """Welcome to pytest-interactive, the pytest + ipython sensation.
-Please explore the test (collection) tree using tt.<TAB>
-When finished tabbing to a test node, simply call it to have
+
+    # test tree needs ref to shell
+    tt._shell = ipshell
+
+    intro = """Welcome to pytest-interactive, the pytest + IPython sensation!\n
+Please explore the collected test tree using tt.<TAB>
+HINT: when finished tabbing to a test node, simply __call__() it to have
 pytest invoke all tests collected under that node."""
-    # embed
-    ipshell(msg, local_ns={
+
+    # embed and block until user exits
+    ipshell(intro, local_ns={
         'tt': tt,
         'shell': ipshell,
         'config': config,
         'session': session,
         })
-    # make final selection
+
+    # submit final selection
     if tt._selection:
         items[:] = list(tt._selection.values())[:]
     else:
@@ -234,11 +233,6 @@ class TestTree(object):
         # pytest terminal reporter
         self._tr = termrep
 
-    def __str__(self):
-        '''stringify current selection length
-        '''
-        return str(len(self._selection))
-
     def __getattr__(self, key):
         try:
             object.__getattribute__(self, key)
@@ -326,11 +320,13 @@ class TestSet(object):
         """Pretty print the current set to console
         """
         self._tree._tr.write_line("")
-        self._tree._tprint(self._items)
-        clsname = self.__class__.__name__
-        nodename = getattr(self._node, 'name', None)
-        ident = "<{} for '{}' -> {} tests>".format(
-            str(clsname), nodename, len(self._items))
+        items = self._items
+        self._tree._tprint(items)
+        self._tree._tr.write_line("")
+        # nodename = getattr(self._node, 'name', None)
+        # TODO: it'd be nice if we could render the std pytest cli selection
+        # syntax here for copy paste to a direct shell invocation.
+        ident = "Total {} tests".format(len(items))
         return ident
 
     def __dir__(self):
@@ -429,6 +425,6 @@ class TestSet(object):
         """
         self._tree._selection.addtests(self)
         self._tree._shell.exit()
-        if not self._tree._shell.exit_now:
+        if self._tree._shell.keep_running:
             # if user aborts remove all tests from this set
             self._tree._selection.removetests(self)
