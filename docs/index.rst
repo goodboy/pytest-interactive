@@ -1,16 +1,15 @@
 pytest-interactive: select tests to run using IPython
 ===========================================================
-This handy plugin allows for the selection and run of pytest tests
+This plugin allows for the selection and run of ``pytest`` tests
 using the command line facilities available in `IPython <http://ipython.org/>`_.
-This includes tab completion along the pytest node hierarchy and test callspec
-ids as well as the use of standard python subscript and slice syntax for selection.
+This includes tab completion along the ``pytest`` node hierarchy and test callspec
+ids as well as the use of standard Python subscript and slice syntax for selection.
 
 Upon invocation with either the ``--interactive`` or shorthand ``--ia`` arguments,
-you will enter an interactive python shell which allows for navigation of the test
-tree built during pytest's collection phase.
+you will enter an IPython shell which allows for navigation of the test tree built
+during the ``pytest`` collection phase.
 
-Enjoy and feel free to submit a pull request or any bugs on my
-`github page`_
+Enjoy and feel free to submit PRs, ask for features, or report bugs on the `github page`_.
 
 .. _github page: https://github.com/tgoodlet/pytest-interactive
 
@@ -36,7 +35,7 @@ or more compactly
 
 
 Pytest will execute normally up until the end of the collection phase at
-which point it will enter a slightly customized ipython shell
+which point it will enter a slightly customized ``IPython`` shell:
 
 .. code-block:: python
 
@@ -44,12 +43,12 @@ which point it will enter a slightly customized ipython shell
     platform linux -- Python 3.4.1 -- py-1.4.20 -- pytest-2.5.2 -- /usr/bin/python
     plugins: interactive
     collected 63 items
-    building test tree...
-    entering ipython workspace...
+    Building test tree...
+    Entering IPython shell...
 
-    Welcome to pytest-interactive, the pytest + ipython sensation.
+    Welcome to pytest-interactive, the pytest + IPython sensation!
     Please explore the test (collection) tree using tt.<TAB>
-    When finished tabbing to a test node, simply call it to have
+    When finished tabbing to a test node, simply __call__ it to have
     pytest invoke all tests collected under that node.
 
 Look, a nice set of instructions to follow
@@ -66,29 +65,26 @@ Look, a nice set of instructions to follow
     tt.test_pinky_strength.test_contrived_name_0
     tt.test_pinky_strength.test_the_readers_patience
 
-That's right, jacked pinky here you come...
+That's right, jacked pinky finger here you come...
 
 
 Select tests via tab-completion
 -----------------------------------
 Basic tab completion should allow you to navigate to the test(s) of interest
-as well as aid in exploring the overall pytest collection tree.
+as well as aid in exploring the overall ``pytest`` collection tree.
 
-Tab completion works along python packages, modules, classes and test
-functions
-The latter three types are collected as nodes by pytest out of the box
-but as an extra aid, intermediary nodes are created for packages containing
-tests as well.
-This is helpful to distinguish between different groups of tests in the file
-system.
+Tab completion works along python packages, modules, classes and test functions.
+The latter three types are collected as nodes by pytest out of the box but as an
+extra aid, intermediary nodes are created for packages containing tests as well.
+This is helpful to distinguish between different groups of tests in the file system.
 
 .. note::
     The binding ``tt`` (abbreviation for *test tree*) is a reference to the
     root of a tree of nodes which roughly corresponds to the collection tree
-    gathered by pytest.
+    gathered by ``pytest``.
 
 If you'd like to see all tests included by a particular node simply
-evaluate it on the shell to trigger a pretty print ``repr`` method:
+evaluate it on the shell to trigger a pretty print ``__repr__()`` method:
 
 .. code-block:: python
 
@@ -111,9 +107,10 @@ evaluate it on the shell to trigger a pretty print ``repr`` method:
     12     <Function 'test_m[c-1]'>
     13     <Function 'test_m[c-2]'>
     14     <Function 'test_m[c-3]'>
-    <TestSet for 'example_test_set/tests/subsets/test_setA.py' -> 15 tests>
 
-When ready to run pytest, simply :func:`__call__` the current node to exit the shell
+    Total 15 tests
+
+When ready to run pytest, simply :func:`__call__()` the current node to exit the shell
 and invoke all tests below it in the tree:
 
 .. code-block:: python
@@ -129,8 +126,6 @@ and invoke all tests below it in the tree:
     You have selected the above 3 test(s) to be run.
     Would you like to run pytest now? ([y]/n)?
     <ENTER>
-
-    exiting shell...
 
     example_test_set/tests/subsets/subsubset/test_setB.py:41: test_modes[a] PASSED
     example_test_set/tests/subsets/subsubset/test_setB.py:41: test_modes[b] PASSED
@@ -154,7 +149,8 @@ Take the following subtree of tests for example:
     0   <Function 'test_modes[a]'>
     1   <Function 'test_modes[b]'>
     2   <Function 'test_modes[c]'>
-    <TestSet for 'None' -> 3 tests>
+
+    Total 3 tests
 
 Now let's select the last test
 
@@ -164,7 +160,8 @@ Now let's select the last test
     Out[2]:
       <Module 'example_test_set/tests/subsets/subsubset/test_setB.py'>
     0   <Function 'test_modes[c]'>
-    <TestSet for 'None' -> 1 tests>
+
+    Total 1 tests
 
 
 Or how about the first two
@@ -176,9 +173,10 @@ Or how about the first two
       <Module 'example_test_set/tests/subsets/subsubset/test_setB.py'>
     0   <Function 'test_modes[a]'>
     1   <Function 'test_modes[b]'>
-    <TestSet for 'None' -> 2 tests>
 
-You can of course :func:`__call__` the indexed node as well to immediately run
+    Total 2 tests
+
+You can of course :func:`__call__()` the indexed node as well to immediately run
 all tests in the selection.
 
 
@@ -229,7 +227,8 @@ To access the available ids use the node's
     13     <Function 'test_m[a-1]'>
     14     <Function 'test_m[a-2]'>
     15     <Function 'test_m[a-3]'>
-    <TestSet for 'pytest-interactive' -> 16 tests>
+
+    Total 16 tests
 
 You can continue to filter in this way as much as is possible
 
@@ -244,7 +243,8 @@ You can continue to filter in this way as much as is possible
       <Module 'example_test_set/tests/test_set_root.py'>
         <Class 'TestBoth'>
     0     <Function 'test_m[a-mouse]'>
-    <TestSet for 'pytest-interactive' -> 1 tests>
+
+    Total 1 tests
 
 .. warning::
     There is one stipulation with using id filtering which is that
@@ -274,7 +274,8 @@ that problem:
     0   <Function 'test_modes[a]'>
     1   <Function 'test_modes[b]'>
     2   <Function 'test_modes[c]'>
-    <TestSet for 'None' -> 3 tests>
+
+    Total 3 tests
 
     '0' selected >>> add tt.test_setB.test_modes[-2:]
 
