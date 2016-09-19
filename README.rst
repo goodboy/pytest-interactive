@@ -2,7 +2,7 @@ pytest-interactive
 ==================
 |pypi| |versions| |pypi_downloads| |docs|
 
-Interactively select tests to run using IPython.
+A ``pytest`` plugin for interactively selecting tests to run using ``IPython``.
 Read the `docs`_ to find out more!
 
 Installation
@@ -13,7 +13,7 @@ Installation
 
 Usage
 -----
-Run pytest with ``--interactive`` or the shorthand ``--ia``
+Run ``pytest`` with ``--interactive`` or the shorthand ``--ia``
 
 .. |versions| image::
     https://img.shields.io/pypi/pyversions/pytest-interactive.svg
