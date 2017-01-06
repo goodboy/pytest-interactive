@@ -1,6 +1,8 @@
 """
 An extended shell for test selection
 """
+import keyword 
+import re
 from IPython.terminal.embed import InteractiveShellEmbed
 from IPython.core.magic import (Magics, magics_class, line_magic)
 from IPython.core.history import HistoryManager
@@ -13,7 +15,8 @@ class TestCounterPrompt(Prompts):
         selected tests.
         """
         return [
-            (Token.PromptNum, '{}'.format(len(self.shell.selection))),
+            (Token.PromptNum, '{}'.format(
+                len(self.shell.user_ns['_selection']))),
             (Token.Prompt, ' selected >>> '),
         ]
 
@@ -59,6 +62,7 @@ class SelectionMagics(Magics):
     """Custom magics for performing multiple test selections
     within a single session
     """
+    # XXX do we actually need this or can we do `user_ns` lookups?
     def ns_eval(self, line):
         '''Evalutate line in the embedded ns and return result
         '''
@@ -78,8 +82,7 @@ class SelectionMagics(Magics):
         return self.tt._tr
 
     def err(self, msg="No tests selected"):
-        self.tr.write("ERROR: ", red=True)
-        self.tr.write_line(msg)
+        self.tt.err(msg)
 
     @line_magic
     def add(self, line):
@@ -145,3 +148,54 @@ class SelectionMagics(Magics):
             self.tt._tprint(items)
         else:
             self.err()
+
+    @line_magic
+    def cache(self, line, ident='pytest/interactive'):
+        """Store a set of tests in the pytest cache for retrieval in another
+        session.
+
+        Usage:
+
+            cache: show a summary of names previously stored in the cache.
+
+            cache del <name>: deletes the named entry from the cache.
+
+            cache add <name> <target>: stores the named tests as target name.
+        """
+        cachedict = self.tt.get_cache_dict()
+        if line:
+            tokens = line.split()
+            subcmd, name = tokens[0], tokens[1]
+
+            if subcmd == 'del':  # delete an entry
+                name = tokens[1]
+                self.tt.set_cache_items(name, None)  # delete
+                self.shell.user_ns.pop(name)
+                self.tr.write(
+                    "Deleted cache entry for '{}'\n".format(name))
+                return
+
+            elif subcmd == 'add':  # create a new entry
+                target = tokens[2]
+                if not re.match("[_A-Za-z][_a-zA-Z0-9]*$", target) \
+                        and not keyword.iskeyword(name):
+                    self.tt.err("'{}' is not a valid identifier"
+                                .format(target))
+                    return
+
+                testset = self.ns_eval(name)
+                self.tt.set_cache_items(target, testset)
+
+                # update the local shell's ns
+                if testset:
+                    self.shell.user_ns[target] = testset
+                self.tr.write(
+                    "Created cache entry for '{}'\n".format(name))
+                return
+
+            self.tt.err("'{}' is invalid. See %cache? for usage.".format(line))
+        else:
+            tr = self.tr
+            tr.write("\nSummary:\n", green=True)
+            for name, testnames in cachedict.items():
+                tr.write('{} -> {} items\n'.format(name, len(testnames)))

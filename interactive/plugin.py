@@ -16,7 +16,7 @@ def pytest_addoption(parser):
                      " collection")
 
 
-@pytest.mark.trylast
+@pytest.hookimpl(trylast=True)
 def pytest_collection_modifyitems(session, config, items):
     """called after collection has been performed, may filter or re-order
     the items in-place.
@@ -30,10 +30,6 @@ def pytest_collection_modifyitems(session, config, items):
 
     tr = config.pluginmanager.getplugin('terminalreporter')
 
-    # build a tree of test items
-    tr.write_line("Building test tree...")
-    tt = TestTree(items, tr)
-
     from .shell import PytestShellEmbed, SelectionMagics
     # prep a separate ipython history file
     fname = 'shell_history.sqlite'
@@ -46,31 +42,43 @@ def pytest_collection_modifyitems(session, config, items):
         else:
             raise
 
+    selection = FuncCollection()
+
     PytestShellEmbed.pytest_hist_file = join(confdir, fname)
     ipshell = PytestShellEmbed(banner1='Entering IPython shell...')
     ipshell.register_magics(SelectionMagics)
     # shell needs ref to curr selection
-    ipshell.selection = tt._selection
+    ipshell.selection = selection
 
+    # build a tree of test items
+    tr.write_line("Building test tree...")
     # test tree needs ref to shell
-    tt._shell = ipshell
+    tt = TestTree(items, tr, ipshell, selection, config)
 
     intro = """Welcome to pytest-interactive, the pytest + IPython sensation!\n
 Please explore the collected test tree using tt.<TAB>
 HINT: when finished tabbing to a test node, simply __call__() it to have
 pytest invoke all tests collected under that node."""
 
-    # embed and block until user exits
-    ipshell(intro, local_ns={
+    user_ns = {
         'tt': tt,
         'shell': ipshell,
         'config': config,
         'session': session,
-        })
+        '_selection': selection,
+        'lastfailed': tt.get_cache_items(path='cache/lastfailed'),
+    }
+
+    # preload cached test sets
+    for name, testnames in tt.get_cache_dict().items():
+        user_ns[name] = tt.get_cache_items(key=name)
+
+    # embed and block until user exits
+    ipshell(intro, local_ns=user_ns)
 
     # submit final selection
-    if tt._selection:
-        items[:] = list(tt._selection.values())[:]
+    if selection:
+        items[:] = list(selection.values())[:]
     else:
         items[:] = []
 
@@ -212,9 +220,9 @@ class FuncCollection(object):
 class TestTree(object):
     '''A tree of all collected tests
     '''
-    def __init__(self, funcitems, termrep):
+    def __init__(self, funcitems, termrep, shell, selection, config):
         self._funcitems = funcitems  # never modify this
-        self._selection = FuncCollection()  # items must be unique
+        self._selection = selection  # items must be unique
         self._path2items = OrderedDict()
         self._item2paths = {}
         self._path2children = {}
@@ -232,6 +240,12 @@ class TestTree(object):
         self.__class__.__getitem__ = self._root.__getitem__
         # pytest terminal reporter
         self._tr = termrep
+        self._shell = shell
+        self._config = config
+
+    def from_items(self, items):
+        return type(self)(items, self._tr, self._shell, self._selection,
+                          self._config)
 
     def __getattr__(self, key):
         try:
@@ -242,8 +256,14 @@ class TestTree(object):
     def __dir__(self, key=None):
         return dir(self._root) + dirinfo(self) + dirinfo(self._root)
 
+    def __str__(self):
+        return str(self._root)
+
     def __repr__(self):
         return repr(self._root)
+
+    def __call__(self):
+        return self._root()
 
     def _tprint(self, items, tr=None):
         '''extended from
@@ -276,6 +296,56 @@ class TestTree(object):
                 indent = indent[:-len(index) or None] + (ncols+1) * " "
                 tr.write("{}".format(index), green=True)
                 tr.write_line("{}{}".format(indent, col))
+
+    def err(self, msg):
+        self._tr.write("ERROR: ", red=True)
+        self._tr.write_line(msg)
+
+    def get_cache_dict(self, path=None):
+        if path is None:
+            path = '/'.join(['pytest-interactive', 'cache'])
+
+        cache = self._config.cache
+        cachedict = cache.get(path, None)
+        if cachedict is None:
+            cache.set(path, {})
+            cachedict = cache.get(path, None)
+
+        return cachedict
+
+    def get_cache_items(self, path=None, key=None):
+        entry = self.get_cache_dict(path=path)
+        testnames = entry.get(key) if key else entry
+
+        if not testnames:
+            return self.err(
+                "No cache entry for '{}'"
+                .format('{}[key={}]'.format(path, key)))
+
+        items_dict = OrderedDict(
+            [(item.nodeid, item) for item in self._funcitems])
+
+        return self.from_items(
+            [items_dict.get(name) for name in testnames
+             if items_dict.get(name)]
+        )._root
+
+    def set_cache_items(self, key, testset):
+        """Enter test items for the given name into the cache under
+        the provided key. If ``bool(testset) == False`` delete the entry.
+        """
+        cachedict = self.get_cache_dict()
+        names = []
+        if testset:
+            for item in testset._items:
+                names.append(item.nodeid)
+        if not names:
+            # remove entry when empty
+            cachedict.pop(key, None)
+        else:
+            cachedict[key] = names
+        cache = self._config.cache
+        cache.set("pytest-interactive/cache", cachedict)
 
 
 def item2params(item):
@@ -315,6 +385,9 @@ class TestSet(object):
         self._ind = indices  # might be a slice
         self._params = params
         self._paramf = by_name(params)
+
+    def __str__(self):
+        return "<{} with {} items>".format(type(self).__name__, len(self._items))
 
     def __repr__(self):
         """Pretty print the current set to console
