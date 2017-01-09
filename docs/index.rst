@@ -315,6 +315,55 @@ syntax available in the IPython shell (i.e. ``add?`` or ``remove?`` or
 ``show?``).
 
 
+``lastfailed`` tests
+--------------------
+``pytest`` exposes the list of failed test from the most recent run
+and stores them in its `cache`_. Normally you can select only those
+test using the `--lf`` flag. ``pytest-interactive`` always wraps
+the `last failed` test set in its shell's local namespace using under
+name ``lastfailed``.
+
+
+Using the ``pytest`` cache
+--------------------------
+You can store test sets for access across sessions using the ``pytest``
+`cache`_. A magic ``%cache`` is available for creating and deleting
+entries:
+
+.. code-block:: python
+
+    '0' selected >>> cache add tt.test_setB.test_modes setb
+
+    '0' selected >>> cache
+
+    Summary:
+    setb -> 3 items
+
+    '0' selected >>> setb  # the local namespace is auto-updated
+      <Module 'example_test_set/tests/subsets/subsubset/test_setB.py'>
+    0   <Function 'test_modes[a]'>
+    1   <Function 'test_modes[b]'>
+    2   <Function 'test_modes[c]'>
+
+    '0' selected >>> exit
+
+
+    # ... come back in a later session ...
+
+
+     # the local namespace is auto-populated with cache entries
+    '0' selected >>> setb
+      <Module 'example_test_set/tests/subsets/subsubset/test_setB.py'>
+    0   <Function 'test_modes[a]'>
+    1   <Function 'test_modes[b]'>
+    2   <Function 'test_modes[c]'>
+
+    '0' selected >>> cache del setb
+    Deleted cache entry for 'setb'
+
+See ``%cache?`` for full command details.
+
+
 Internal reference
 ------------------
 .. toctree::
