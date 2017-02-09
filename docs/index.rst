@@ -1,5 +1,5 @@
-pytest-interactive: select tests to run using IPython
-===========================================================
+pytest-interactive: select tests to run using a REPL
+====================================================
 This plugin allows for the selection and run of ``pytest`` tests
 using the command line facilities available in `IPython <http://ipython.org/>`_.
 This includes tab completion along the ``pytest`` node hierarchy and test callspec
@@ -12,10 +12,6 @@ during the ``pytest`` collection phase.
 Enjoy and feel free to submit PRs, ask for features, or report bugs on the `github page`_.
 
 .. _github page: https://github.com/tgoodlet/pytest-interactive
-
-.. contents::
-    :local:
-    :backlinks: entry
 
 
 Quickstart
@@ -37,7 +33,7 @@ or more compactly
 Pytest will execute normally up until the end of the collection phase at
 which point it will enter a slightly customized ``IPython`` shell:
 
-.. code-block:: python
+::
 
     ============================ test session starts ============================
     platform linux -- Python 3.4.1 -- py-1.4.20 -- pytest-2.5.2 -- /usr/bin/python
@@ -51,7 +47,6 @@ which point it will enter a slightly customized ``IPython`` shell:
     When finished tabbing to a test node, simply __call__ it to have
     pytest invoke all tests collected under that node.
 
-Look, a nice set of instructions to follow
 
 .. code-block:: python
 
@@ -117,7 +112,7 @@ and invoke all tests below it in the tree:
 
     '0' selected >>> tt.test_setB.test_modes()
 
-.. code-block:: python
+::
 
     example_test_set/tests/subsets/subsubset/test_setB.py::test_modes[a]
     example_test_set/tests/subsets/subsubset/test_setB.py::test_modes[b]
@@ -260,8 +255,8 @@ You can continue to filter in this way as much as is possible
 
 Multiple selections and magics
 ------------------------------
-So by now I'm sure you've thought *oh hey this is damn neat, but what if
-I want to select tests from totally different parts of the tree??*
+So by now I'm sure you've thought *but what if I want to select tests from
+totally different parts of the tree?*
 
 Well lucky for you some %magics have been added to the shell to help with just
 that problem:
@@ -319,7 +314,7 @@ syntax available in the IPython shell (i.e. ``add?`` or ``remove?`` or
 --------------------
 ``pytest`` exposes the list of failed test from the most recent run
 and stores them in its `cache`_. Normally you can select only those
-test using the `--lf`` flag. ``pytest-interactive`` always wraps
+test using the ``--lf`` flag. ``pytest-interactive`` always wraps
 the `last failed` test set in its shell's local namespace using under
 name ``lastfailed``.
 
@@ -363,19 +358,14 @@ entries:
 
 See ``%cache?`` for full command details.
 
-
-Internal reference
-------------------
+API reference
+-------------
 .. toctree::
-    :maxdepth: 3
+    :maxdepth: 2
 
     plugin
     shell
 
-
-Indices and tables
-------------------
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
+.. links
+.. _cache:
+    http://doc.pytest.org/en/latest/cache.html
