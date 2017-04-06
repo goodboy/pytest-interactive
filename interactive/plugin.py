@@ -1,4 +1,3 @@
-import _pytest
 import pytest
 import math
 import errno
@@ -99,7 +98,7 @@ def gen_nodes(item, cache):
             name = node._obj.__name__
         except AttributeError as ae:
             # when either Instance or non-packaged module
-            if isinstance(node, _pytest.python.Instance):
+            if isinstance(node, pytest.Instance):
                 # leave out Instances, later versions are going to drop them
                 # anyway
                 continue
@@ -108,7 +107,7 @@ def gen_nodes(item, cache):
             else:  # XXX should never get here
                 raise ae
         # packaged module
-        if '.' in name and isinstance(node, _pytest.python.Module):
+        if '.' in name and isinstance(node, pytest.Module):
             # FIXME: this should be cwd dependent!!!
             # (i.e. don't add package objects we're below in the fs)
             prefix = tuple(name.split('.'))
@@ -121,7 +120,7 @@ def gen_nodes(item, cache):
                 yield path, Package(name, lpath, node, node.parent)
             name = prefix[-1]  # this mod's name
         # func item
-        elif isinstance(node, _pytest.python.Function):
+        elif isinstance(node, pytest.Item):
             name = node.name
             if '[' in name:
                 funcname = name.split('[')[0]
