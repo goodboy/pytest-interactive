@@ -254,18 +254,6 @@ class TestTree(object):
         except AttributeError:
             return getattr(self._root, key)
 
-    def __dir__(self, key=None):
-        return dir(self._root) + dirinfo(self) + dirinfo(self._root)
-
-    def __str__(self):
-        return str(self._root)
-
-    def __repr__(self):
-        return repr(self._root)
-
-    def __call__(self):
-        return self._root()
-
     def _tprint(self, items, tr=None):
         '''extended from
         pytest.terminal.TerminalReporter._printcollecteditems
