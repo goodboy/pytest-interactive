@@ -52,7 +52,7 @@ def pytest_collection_modifyitems(session, config, items):
     # build a tree of test items
     tr.write_line("Building test tree...")
     # test tree needs ref to shell
-    tt = TestTree(items, tr, ipshell, selection, config)
+    tree = TestTree(items, tr, ipshell, selection, config)
 
     intro = """Welcome to pytest-interactive, the pytest + IPython sensation!\n
 Please explore the collected test tree using tt.<TAB>
@@ -60,17 +60,18 @@ HINT: when finished tabbing to a test node, simply __call__() it to have
 pytest invoke all tests collected under that node."""
 
     user_ns = {
-        'tt': tt,
+        '_tree': tree,
+        'tt': tree._root,
         'shell': ipshell,
         'config': config,
         'session': session,
         '_selection': selection,
-        'lastfailed': tt.get_cache_items(path='cache/lastfailed'),
+        'lastfailed': tree.get_cache_items(path='cache/lastfailed'),
     }
 
     # preload cached test sets
-    for name, testnames in tt.get_cache_dict().items():
-        user_ns[name] = tt.get_cache_items(key=name)
+    for name, testnames in tree.get_cache_dict().items():
+        user_ns[name] = tree.get_cache_items(key=name)
 
     # embed and block until user exits
     ipshell(intro, local_ns=user_ns)
@@ -83,7 +84,7 @@ pytest invoke all tests collected under that node."""
 
 
 _root_ids = ('.', '')
-_root_name = 'session'
+_root_name = 'pytest'
 Package = namedtuple('Package', 'name path node parent')
 
 
@@ -95,7 +96,7 @@ def gen_nodes(item, cache):
     chain = item.listchain()
     for node in chain:
         try:
-            name = node._obj.__name__
+            name = node.name.replace(os.path.sep, '.').rstrip('.py')
         except AttributeError as ae:
             # when either Instance or non-packaged module
             if isinstance(node, pytest.Instance):
@@ -154,7 +155,7 @@ def tosymbol(ident):
     ident = str(ident)
     ident = ident.replace(' ', '_')
     ident = re.sub('[^a-zA-Z0-9_]', '_', ident)
-    if ident[0].isdigit():
+    if ident and ident[0].isdigit():
         return ''
     return ident
 
@@ -251,18 +252,6 @@ class TestTree(object):
             object.__getattribute__(self, key)
         except AttributeError:
             return getattr(self._root, key)
-
-    def __dir__(self, key=None):
-        return dir(self._root) + dirinfo(self) + dirinfo(self._root)
-
-    def __str__(self):
-        return str(self._root)
-
-    def __repr__(self):
-        return repr(self._root)
-
-    def __call__(self):
-        return self._root()
 
     def _tprint(self, items, tr=None):
         '''extended from

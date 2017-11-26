@@ -71,7 +71,7 @@ class SelectionMagics(Magics):
 
     @property
     def tt(self):
-        return self.ns_eval('tt')
+        return self.ns_eval('_tree')
 
     @property
     def selection(self):
