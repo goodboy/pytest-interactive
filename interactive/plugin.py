@@ -84,7 +84,7 @@ pytest invoke all tests collected under that node."""
 
 
 _root_ids = ('.', '')
-_root_name = 'session'
+_root_name = 'pytest'
 Package = namedtuple('Package', 'name path node parent')
 
 
@@ -96,7 +96,7 @@ def gen_nodes(item, cache):
     chain = item.listchain()
     for node in chain:
         try:
-            name = node._obj.__name__
+            name = node.name.replace(os.path.sep, '.').rstrip('.py')
         except AttributeError as ae:
             # when either Instance or non-packaged module
             if isinstance(node, _pytest.python.Instance):
