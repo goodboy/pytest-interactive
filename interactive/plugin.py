@@ -393,7 +393,7 @@ class TestSet(object):
     def __dir__(self):
         if isinstance(self._node, FuncCollection):
             return dir(self.params)
-        return self._childkeys
+        return self._childkeys + ['params']
 
     @property
     def _childkeys(self):
