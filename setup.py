@@ -7,7 +7,7 @@ with open('README.rst') as f:
 
 setup(
      name="pytest-interactive",
-     version='0.1.2',
+     version='0.1.3',
      description='A pytest plugin for console based interactive test selection'
                  ' just after the collection phase',
      long_description=readme,
