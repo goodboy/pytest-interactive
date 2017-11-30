@@ -7,7 +7,7 @@ with open('README.rst') as f:
 
 setup(
      name="pytest-interactive",
-     version='0.1.3',
+     version='0.1.4',
      description='A pytest plugin for console based interactive test selection'
                  ' just after the collection phase',
      long_description=readme,
@@ -15,7 +15,6 @@ setup(
      author='Tyler Goodlet',
      author_email='tgoodlet@gmail.com',
      url='https://github.com/tgoodlet/pytest-interactive',
-     download_url='https://github.com/tgoodlet/pytest-interactive/tarball/0.1',
      platforms=['linux'],
      packages=['interactive'],
      entry_points={'pytest11': [
