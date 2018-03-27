@@ -25,7 +25,10 @@ def pytest_collection_modifyitems(session, config, items):
 
     capman = config.pluginmanager.getplugin("capturemanager")
     if capman:
-        capman.suspendcapture(in_=True)
+        if getattr(capman, 'suspendcapture', False):
+            capman.suspendcapture(in_=True)
+        else:
+            capman.suspend_global_capture(in_=True)
 
     tr = config.pluginmanager.getplugin('terminalreporter')
 
@@ -82,6 +85,12 @@ pytest invoke all tests collected under that node."""
     else:
         items[:] = []
 
+    if capman:
+        if getattr(capman, 'resumecapture', False):
+            capman.resumecapture
+        else:
+            capman.resume_global_capture()
+
 
 _root_ids = ('.', '')
 Package = namedtuple('Package', 'name path node parent')
@@ -94,15 +103,14 @@ def gen_nodes(item, cache, root_name):
     # pytest node api - lists path items in order
     chain = item.listchain()
     for node in chain:
+        # when either Instance or non-packaged module
+        if isinstance(node, pytest.Instance):
+            # leave out Instances, later versions 'should' drop them
+            continue
         try:
             name = node.name.replace(os.path.sep, '.').rstrip('.py')
         except AttributeError as ae:
-            # when either Instance or non-packaged module
-            if isinstance(node, pytest.Instance):
-                # leave out Instances, later versions are going to drop them
-                # anyway
-                continue
-            elif node.nodeid in _root_ids:
+            if node.nodeid in _root_ids:
                 name = root_name
             else:  # XXX should never get here
                 raise ae
@@ -375,7 +383,8 @@ class TestSet(object):
         self._paramf = by_name(params)
 
     def __str__(self):
-        return "<{} with {} items>".format(type(self).__name__, len(self._items))
+        return "<{} with {} items>".format(
+            type(self).__name__, len(self._items))
 
     def __repr__(self):
         """Pretty print the current set to console
