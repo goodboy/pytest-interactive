@@ -108,7 +108,9 @@ def gen_nodes(item, cache, root_name):
             # leave out Instances, later versions 'should' drop them
             continue
         try:
-            name = node.name.replace(os.path.sep, '.').rstrip('.py')
+            name = node.name.replace(os.path.sep, '.')
+            if '.py' in name:
+                name = name.rstrip('.py')
         except AttributeError as ae:
             if node.nodeid in _root_ids:
                 name = root_name
